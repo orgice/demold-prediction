@@ -1,0 +1,23 @@
+# 환경·빌드 산출물
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.DS_Store
+*.tsbuildinfo
+
+# 인증키·비밀번호 (예시는 .env.example)
+.env
+
+# 협력사 데이터·문서는 공개 저장소에 올리지 않는다
+private_data/
+받은자료/
+미팅녹음/
+실험/
+data/
+outputs/
+*.zip
+webapp/backend/seed/*.csv
+!webapp/backend/seed/*.example.csv
+webapp/backend/app/data/guideline_chunks.json

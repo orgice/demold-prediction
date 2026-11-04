@@ -1,0 +1,40 @@
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-demold-root}
+      MARIADB_DATABASE: demold
+      MARIADB_USER: demold
+      MARIADB_PASSWORD: ${DB_PASSWORD:-demold}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_general_ci",
+              "--innodb-buffer-pool-size=512M"]
+    ports: ["3306:3306"]
+    volumes: [db-data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 30
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: mysql+pymysql://demold:${DB_PASSWORD:-demold}@db:3306/demold?charset=utf8mb4
+      KMA_SERVICE_KEY: ${KMA_SERVICE_KEY:-}   # webapp/.env 에서 읽음
+      GRAM_SENSORS: ${GRAM_SENSORS:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-qwen}
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["8000:8000"]
+    volumes:
+      # 초기 적재용 센서 CSV 폴더 (읽기 전용). 데이터는 저장소에 포함되지 않음 → webapp/.env 의 SEED_SENSOR_DIR
+      - ${SEED_SENSOR_DIR:-../private_data/sensors}:/seed/sensors:ro
+
+  frontend:
+    build: ./frontend
+    depends_on: [backend]
+    ports: ["8080:80"]
+
+volumes:
+  db-data:
