@@ -17,9 +17,9 @@ function App() {
         <nav className="nav">
           <NavLink to="/" end>현재 공사</NavLink>
           <NavLink to="/pours">타설 이력</NavLink>
-          <NavLink to="/assistant">AI 상담</NavLink>
           <NavLink to="/sensors">센서 데이터</NavLink>
           <NavLink to="/upload">데이터 업로드</NavLink>
+          <NavLink to="/assistant">AI 상담</NavLink>
         </nav>
       </header>
       <Routes>

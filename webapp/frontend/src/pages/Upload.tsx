@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
-import { api, UploadResult } from "../api/client";
+import { Link } from "react-router-dom";
+import { api, Pour, UploadResult } from "../api/client";
 import { ErrorBox, useAsync } from "../components/common";
+import NewPourModal, { NewPourResult } from "../components/NewPourModal";
 import { fmtFull } from "../format";
 
 export default function Upload() {
@@ -10,6 +12,9 @@ export default function Upload() {
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<UploadResult[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [registering, setRegistering] = useState(false);
+  const [pending, setPending] = useState<File[]>([]); // 팝업에 넘길 파일
+  const [created, setCreated] = useState<Pour | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   const add = (list: FileList | null) => {
@@ -17,7 +22,7 @@ export default function Upload() {
     setFiles((f) => [...f, ...Array.from(list).filter((x) => x.name.toLowerCase().endsWith(".csv"))]);
   };
   const submit = async () => {
-    setBusy(true); setErr(null); setResults(null);
+    setBusy(true); setErr(null); setResults(null); setCreated(null);
     try {
       setResults(await api.upload(files));
       setFiles([]); history.reload();
@@ -25,23 +30,47 @@ export default function Upload() {
     finally { setBusy(false); }
   };
 
+  const openRegister = (list: File[]) => { setPending(list); setRegistering(true); };
+
+  const registered = ({ pour, uploads }: NewPourResult) => {
+    setRegistering(false);
+    setCreated(pour);
+    setResults(uploads.length > 0 ? uploads : null);
+    setFiles([]); history.reload();
+  };
+
   return (
     <main className="page">
-      <div>
-        <h1>데이터 업로드</h1>
-        <div className="muted small">
-          센서 수집 DB에서 내려받은 측압·수분 CSV를 올리면 DB에 저장되고 예측에 바로 반영됩니다.
-          이미 들어간 행은 자동으로 건너뜁니다.
+      <div className="page-head">
+        <div>
+          <h1>데이터 업로드</h1>
+          <div className="muted small">
+            측압·수분 CSV를 올리면서 새 타설을 함께 등록합니다. 이미 들어간 행은 자동으로 건너뜁니다.
+          </div>
         </div>
+        <button className="btn primary" onClick={() => openRegister(files)}>+ 새 타설 등록</button>
       </div>
+      {created && (
+        <div className="alert success" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span>
+            {results ? `파일 ${results.length}개(${results.reduce((n, r) => n + r.rows_inserted, 0).toLocaleString()}행)를 저장하고 ` : ""}
+            타설 이력에 <b>{created.name}</b>을(를) 등록했습니다.
+          </span>
+          <Link to={`/pours/${created.id}`} className="btn sm">타설 상세에서 그래프 보기</Link>
+        </div>
+      )}
       <div className={`dropzone ${over ? "over" : ""}`}
-        onClick={() => input.current?.click()}
+        onClick={() => openRegister([])}
         onDragOver={(e) => { e.preventDefault(); setOver(true); }}
         onDragLeave={() => setOver(false)}
-        onDrop={(e) => { e.preventDefault(); setOver(false); add(e.dataTransfer.files); }}>
-        <input ref={input} type="file" accept=".csv" multiple hidden onChange={(e) => add(e.target.files)} />
-        <div style={{ fontSize: 16, fontWeight: 600 }}>CSV 파일을 끌어다 놓거나 클릭해서 선택</div>
+        onDrop={(e) => { e.preventDefault(); setOver(false); openRegister(Array.from(e.dataTransfer.files)); }}>
+        <div style={{ fontSize: 16, fontWeight: 600 }}>CSV 파일을 끌어다 놓거나 클릭해서 새 타설 등록</div>
         <div className="tiny">측압·수분 파일은 컬럼으로 자동 구분합니다</div>
+      </div>
+      <div className="small muted">
+        기존 회차에 이어지는 데이터라면{" "}
+        <button className="btn sm" onClick={() => input.current?.click()}>타설 등록 없이 파일만 올리기</button>
+        <input ref={input} type="file" accept=".csv" multiple hidden onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
       </div>
       {files.length > 0 && (
         <div className="card">
@@ -49,6 +78,7 @@ export default function Upload() {
             <h3>선택한 파일 {files.length}개</h3>
             <div className="actions">
               <button className="btn" onClick={() => setFiles([])} disabled={busy}>비우기</button>
+              <button className="btn" onClick={() => openRegister(files)} disabled={busy}>새 타설로 등록</button>
               <button className="btn primary" onClick={submit} disabled={busy}>{busy ? "업로드·집계 중… (큰 파일은 몇 분)" : "업로드"}</button>
             </div>
           </div>
@@ -80,6 +110,7 @@ export default function Upload() {
           ))}</tbody>
         </table>
       </div>
+      {registering && <NewPourModal initialFiles={pending} onClose={() => setRegistering(false)} onDone={registered} />}
     </main>
   );
 }

@@ -92,6 +92,9 @@ export interface UploadResult {
   period_start: string | null; period_end: string | null; sensors: string[];
 }
 
+// 업로드 이력에는 sensors가 없다
+export type UploadLog = Omit<UploadResult, "sensors"> & { id: number; created_at: string };
+
 export interface ChatMessage { role: "user" | "assistant"; content: string }
 export interface AgentStep { tool: string; args: Record<string, unknown>; ok: boolean }
 export interface AgentReply { answer: string; steps: AgentStep[]; elapsed_ms: number }
@@ -145,7 +148,7 @@ export const api = {
     files.forEach((f) => fd.append("files", f));
     return request<UploadResult[]>("/api/upload", { method: "POST", body: fd });
   },
-  uploads: () => request<(UploadResult & { id: number; created_at: string })[]>("/api/uploads"),
+  uploads: () => request<UploadLog[]>("/api/uploads"),
   ask: (question: string, history: ChatMessage[]) =>
     request<AgentReply>("/api/agent/ask", json("POST", { question, history })),
 };
