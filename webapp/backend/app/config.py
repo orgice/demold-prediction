@@ -7,6 +7,9 @@ DATABASE_URL = os.environ.get(
 # 측압 weight 단위가 g인 센서. 나머지는 kg (컬럼설명: 4자리면 kg, 앞으로 g로 통일 예정)
 GRAM_SENSORS = {m.strip().upper() for m in os.environ.get("GRAM_SENSORS", "").split(",") if m.strip()}
 
+# 화면의 센서 목록에서 숨기는 센서 MAC (쉼표 구분, 데이터는 DB에 남김). 예: 본 실험과 무관한 예비시험 장치
+HIDDEN_SENSORS = {m.strip().upper() for m in os.environ.get("HIDDEN_SENSORS", "").split(",") if m.strip()}
+
 PRESSURE_OUTLIER_KG = 60      # 이 값을 넘는 측압은 센서 오류 (협력사 기준)
 TEMP_MISSING = -100           # 이 값 이하 온도는 센서 미연결 (-127)
 RAWMO_MISSING = 4095          # 수분센서 미연결로 추정

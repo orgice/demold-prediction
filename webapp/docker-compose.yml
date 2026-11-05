@@ -21,6 +21,7 @@ services:
       DATABASE_URL: mysql+pymysql://demold:${DB_PASSWORD:-demold}@db:3306/demold?charset=utf8mb4
       KMA_SERVICE_KEY: ${KMA_SERVICE_KEY:-}   # webapp/.env 에서 읽음
       GRAM_SENSORS: ${GRAM_SENSORS:-}
+      HIDDEN_SENSORS: ${HIDDEN_SENSORS:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-qwen}

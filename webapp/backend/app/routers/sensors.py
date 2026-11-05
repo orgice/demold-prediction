@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import maturity
 from ..db import engine, get_session
+from ..config import HIDDEN_SENSORS
 from ..ingest import IngestError, ingest_csv
 from ..models import UploadLog
 from ..schemas import SensorOut, UploadOut
@@ -22,7 +23,8 @@ def list_sensors():
         "SELECT mac, MIN(bucket) AS first, MAX(bucket) AS last, COUNT(*) AS buckets, "
         "SUM(uf_val IS NOT NULL) AS moist FROM sensor_10min GROUP BY mac ORDER BY mac"), engine)
     return [SensorOut(mac=r.mac, kind="moisture" if r.moist > 0 else "pressure",
-                      first=r["first"], last=r["last"], buckets=int(r.buckets)) for _, r in rows.iterrows()]
+                      first=r["first"], last=r["last"], buckets=int(r.buckets))
+            for _, r in rows.iterrows() if r.mac not in HIDDEN_SENSORS]
 
 
 @router.get("/sensors/series")
