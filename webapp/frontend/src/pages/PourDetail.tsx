@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, Pour, Prediction, StrengthTest, StrengthTestIn } from "../api/client";
 import { Chart, sensorColor, useChartTheme } from "../components/Chart";
 import { ErrorBox, Loading, MilestoneRow, useAsync } from "../components/common";
-import { addHours, fmtAge, fmtDateTime, fmtFull, fromInput, hoursBetween, toInput } from "../format";
+import { fmtDateTime, fmtFull, fromInput, hoursBetween, toInput } from "../format";
 
 type Tab = "predict" | "pourtime" | "tests" | "settings";
 const TABS: [Tab, string][] = [
@@ -52,42 +52,12 @@ export default function PourDetail({ pourId, live }: { pourId?: number; live?: b
 // ---------------- 강도 예측 ----------------
 function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
   const latest = useAsync(() => api.prediction(pour.id), [pour.id, version]);
-  const [hour, setHour] = useState<number | null>(null);   // 슬라이더 (타설 후 시간)
-  const [pred, setPred] = useState<Prediction | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  const maxHour = latest.data ? Math.floor(hoursBetween(latest.data.start, latest.data.data_end)) : 0;
-  useEffect(() => { if (latest.data) { setPred(latest.data); setHour(null); } }, [latest.data]);
-  useEffect(() => {
-    if (hour == null || !latest.data) return;
-    const t = setTimeout(() => {
-      api.prediction(pour.id, addHours(latest.data!.start, hour)).then(setPred).catch((e) => setErr(e.message));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [hour, pour.id, latest.data]);
-
   if (latest.error) return <ErrorBox error={latest.error} />;
+  const pred = latest.data;
   if (!pred) return <Loading text="예측 계산 중…" />;
-  const asOfHour = hoursBetween(pred.start, pred.as_of);
-  const isHistorical = hour != null && hour < maxHour;
 
   return (
     <>
-      <div className="card">
-        <div className="slider">
-          <strong>기준 시각</strong>
-          <input type="range" min={1} max={maxHour} step={1} value={hour ?? maxHour}
-            onChange={(e) => setHour(Number(e.target.value))} aria-label="기준 시각 (타설 후 시간)" />
-          <span>{fmtFull(pred.as_of)} · 타설 후 {fmtAge(asOfHour)}</span>
-          {isHistorical && <button className="btn sm" onClick={() => setHour(null)}>최신으로</button>}
-        </div>
-        <div className="tiny" style={{ marginTop: 6 }}>
-          슬라이더를 움직이면 "그 시각에 예측했다면"을 보여줍니다. 그 시각 이후 온도는 직전 24시간 패턴으로 가정하고,
-          그 시각까지 나온 공시체 결과만 보정에 씁니다.
-        </div>
-      </div>
-      <ErrorBox error={err} />
-
       <div className="grid kpis">
         <div className="kpi">
           <div className="label">현재 예측 강도</div>
@@ -159,7 +129,7 @@ function StrengthChart({ pred, design }: { pred: Prediction; design: number | nu
       trigger: "axis",
       valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} MPa`),
     },
-    legend: { data: ["예측 (관측 온도)", "예측 (가정 온도)", "공시체 (보정 사용)", "공시체 (이후 실측)"] },
+    legend: { data: ["예측 (관측 온도)", "예측 (가정 온도)", "공시체 시험 결과"] },
     xAxis: { type: "value", name: "타설 후 (일)", nameLocation: "middle", nameGap: 28, min: 0, max: 28 },
     yAxis: { type: "value", name: "MPa", min: 0 },
     dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
@@ -180,19 +150,22 @@ function StrengthChart({ pred, design }: { pred: Prediction; design: number | nu
         markLine: {
           symbol: "none", silent: true, label: { formatter: "{b}", position: "insideEndTop", color: th.text },
           lineStyle: { color: th.text, type: "dashed", width: 1 },
-          data: [...lines, { xAxis: day(hoursBetween(pred.start, pred.as_of)), name: "기준 시각" }],
+          data: [...lines, { xAxis: day(hoursBetween(pred.start, pred.as_of)), name: nowLabel(pred.as_of) }],
         } },
       { name: "예측 (가정 온도)", type: "line", data: fut.map((s) => [day(s.age_h), s.strength]), symbol: "none",
         lineStyle: { width: 2, type: "dashed", color: th.accent }, itemStyle: { color: th.accent } },
-      { name: "공시체 (보정 사용)", type: "scatter", symbolSize: 10,
+      { name: "공시체 시험 결과", type: "scatter", symbolSize: 10,
         data: testMeans(pred, true).map((t) => [day(t.age_h), t.fc]),
         itemStyle: { color: "#eb6834", borderColor: th.surface, borderWidth: 1.5 } },
-      { name: "공시체 (이후 실측)", type: "scatter", symbolSize: 10, symbol: "emptyCircle",
-        data: testMeans(pred, false).map((t) => [day(t.age_h), t.fc]),
-        itemStyle: { color: "#eb6834" } },
     ],
   };
   return <Chart option={option} height={380} />;
+}
+
+// 마지막 센서 데이터가 1시간 이내면 "현재 시각", 늦어지면 그 시각을 적어 데이터가 끊긴 걸 보이게 한다
+function nowLabel(asOf: string) {
+  const lagMs = Date.now() - new Date(asOf).getTime();
+  return lagMs <= 3600_000 ? "현재 시각" : `마지막 데이터 ${fmtDateTime(asOf)}`;
 }
 
 // 한 번의 시험(같은 test_id)에서 깬 공시체 2~3개를 평균 내 점 하나로 그린다
@@ -396,10 +369,9 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
 // ---------------- 설정 ----------------
 function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   const nav = useNavigate();
-  const sensors = useAsync(api.sensors, []);
   const [f, setF] = useState({
     name: pour.name, site: pour.site ?? "", design: pour.design_strength?.toString() ?? "",
-    note: pour.note ?? "", sensors: pour.sensors,
+    note: pour.note ?? "",
   });
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -408,7 +380,7 @@ function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
     setErr(null);
     try {
       await api.updatePour(pour.id, {
-        name: f.name, site: f.site || null, note: f.note || null, sensors: f.sensors,
+        name: f.name, site: f.site || null, note: f.note || null,
         design_strength: f.design ? Number(f.design) : null,
       });
       setMsg("저장했습니다."); onSaved();
@@ -418,8 +390,6 @@ function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
     if (!confirm(`${pour.name}과 공시체 결과를 모두 삭제할까요? (센서 데이터는 남습니다)`)) return;
     await api.deletePour(pour.id); nav("/pours");
   };
-  const toggle = (mac: string) =>
-    setF((x) => ({ ...x, sensors: x.sensors.includes(mac) ? x.sensors.filter((m) => m !== mac) : [...x.sensors, mac] }));
 
   return (
     <div className="card">
@@ -428,17 +398,6 @@ function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
         <label className="field">현장<input value={f.site} onChange={(e) => setF({ ...f, site: e.target.value })} /></label>
         <label className="field">설계기준강도 (MPa)<input type="number" value={f.design} placeholder="배합표 확인 후 입력"
           onChange={(e) => setF({ ...f, design: e.target.value })} /></label>
-      </div>
-      <div className="field" style={{ marginTop: 12 }}>
-        <span className="small muted">센서 (내부온도 평균에 쓰이고, 그래프에 표시됩니다)</span>
-        <div className="chips">
-          {sensors.data?.map((s, i) => (
-            <span key={s.mac} className={`chip ${f.sensors.includes(s.mac) ? "on" : ""}`} onClick={() => toggle(s.mac)}>
-              <span className="dot" style={{ background: sensorColor(s.mac, i) }} />{s.mac}
-              <span className="tiny">{fmtDateTime(s.first)}~{fmtDateTime(s.last)}</span>
-            </span>
-          ))}
-        </div>
       </div>
       <label className="field" style={{ marginTop: 12 }}>메모<textarea rows={3} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></label>
       <div className="actions" style={{ marginTop: 12, justifyContent: "space-between" }}>
