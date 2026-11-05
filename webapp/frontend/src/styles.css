@@ -15,6 +15,8 @@
   --warn-bg: #fff4d6;
   --bad: #c4314b;
   --bad-bg: #fde8ec;
+  --info: #1d5fae;
+  --info-bg: #e3eefb;
   --radius: 10px;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
@@ -39,6 +41,8 @@
     --warn-bg: #3a2f12;
     --bad: #f0707f;
     --bad-bg: #3d1b22;
+    --info: #8ab8f0;
+    --info-bg: #1c2b40;
     --shadow: none;
   }
 }
@@ -86,6 +90,7 @@ h3 { font-size: 15px; }
 .badge.good { background: var(--good-bg); color: var(--good); }
 .badge.warn { background: var(--warn-bg); color: var(--warn); }
 .badge.bad { background: var(--bad-bg); color: var(--bad); }
+.badge.info { background: var(--info-bg); color: var(--info); }
 .badge.neutral { background: var(--surface-2); color: var(--text-2); }
 
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
@@ -120,6 +125,7 @@ th { color: var(--text-2); font-weight: 600; font-size: 13px; }
 .alert { padding: 10px 14px; border-radius: 8px; font-size: 14px; }
 .alert.error { background: var(--bad-bg); color: var(--bad); }
 .alert.info { background: var(--surface-2); color: var(--text-2); }
+.alert.success { background: var(--good-bg); color: var(--good); }
 .alert.warn { background: var(--warn-bg); color: var(--warn); }
 
 .slider { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -134,8 +140,12 @@ th { color: var(--text-2); font-weight: 600; font-size: 13px; }
 .dropzone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 32px; text-align: center; color: var(--text-2); cursor: pointer; }
 .dropzone.over { border-color: var(--accent); background: var(--surface-2); }
 
+.file-list { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.file-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+.file-add { display: block; width: 100%; padding: 12px; border: 0; background: none; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; }
+.file-add:hover { background: var(--surface-2); }
 .modal-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
-.modal { background: var(--surface); border-radius: var(--radius); padding: 20px; width: min(560px, 100%); display: flex; flex-direction: column; gap: 14px; max-height: 90vh; overflow: auto; }
+.modal { background: var(--surface); border-radius: var(--radius); padding: 20px; width: min(640px, 100%); display: flex; flex-direction: column; gap: 14px; max-height: 90vh; overflow: auto; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
 @media (max-width: 640px) {
