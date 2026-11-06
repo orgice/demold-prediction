@@ -41,7 +41,7 @@ export interface Prediction {
   tests: { test_id: number; t: string; age_h: number; fc: number; used_for_calibration: boolean }[];
   model: {
     method: string; calibrated: boolean; calibration_scale: number; calibration_tests: number;
-    sigma: number; interval: string; train_pours: number[]; train_specimens: number; forecast: string;
+    sigma: number; interval: string; train_pours: number[]; train_specimens: number; fixed_curve: boolean; forecast: string;
     params: Record<string, number>;
   };
 }
