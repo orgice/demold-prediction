@@ -18,7 +18,7 @@ from scipy.optimize import curve_fit
 from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
-from .config import CALIBRATION_MAX_AGE_DAY, DATUM_TEMP, THRESHOLDS
+from .config import CALIBRATION_MAX_AGE_DAY, DATUM_TEMP, FIXED_CURVE, FIXED_CURVE_SIGMA, THRESHOLDS
 
 STEP = timedelta(minutes=10)
 HORIZON = timedelta(days=28)
@@ -120,7 +120,18 @@ def train(engine: Engine, pours: list, exclude_id: int | None):
     data = [d for p in pours if p.id != exclude_id
             for d in [pour_data(engine, p)] if d is not None and not d.specimens.empty]
     if len(data) < 2:
-        raise PredictionError("학습할 공시체 데이터가 있는 회차가 2개 이상 필요합니다.")
+        # 공시체 회차가 부족하면 고정 곡선 사용 (회차 보정은 그대로 적용됨)
+        result = {
+            "params": np.array([FIXED_CURVE["Su"], FIXED_CURVE["k"], FIXED_CURVE["M0"]]),
+            "sigma_uncal": FIXED_CURVE_SIGMA,
+            "sigma_cal": FIXED_CURVE_SIGMA,
+            "n_pours": 0,
+            "n_specimens": 0,
+            "pour_ids": [],
+            "fixed": True,
+        }
+        _cache[key] = result
+        return result
     allspec = pd.concat([d.specimens.assign(pour=d.pour_id) for d in data])
     params = fit_curve(allspec.x, allspec.fc)
 
@@ -147,6 +158,7 @@ def train(engine: Engine, pours: list, exclude_id: int | None):
         "n_pours": len(data),
         "n_specimens": len(allspec),
         "pour_ids": [d.pour_id for d in data],
+        "fixed": False,
     }
     _cache[key] = result
     return result
@@ -280,6 +292,7 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
             "interval": "90%",
             "train_pours": model["pour_ids"],
             "train_specimens": model["n_specimens"],
+            "fixed_curve": model["fixed"],
             "forecast": "기준 시각 이후 온도는 직전 24시간 패턴 반복으로 가정",
         },
     }

@@ -20,3 +20,7 @@ THRESHOLDS = {"wall": 5.0, "slab": 14.0}
 # 적산온도 모델 (회차 단위 교차검증(LOPO) 결과 최적: Nurse-Saul T0=0℃ + 쌍곡선형)
 DATUM_TEMP = 0.0
 CALIBRATION_MAX_AGE_DAY = 1.6  # 이 재령 이하 공시체로 회차 보정
+
+# 학습할 공시체 회차가 2개 미만일 때 쓰는 고정 강도곡선 S = Su·k(M−M0)/(1+k(M−M0))
+FIXED_CURVE = {"Su": 24.8, "k": 0.01369, "M0": 11.48}   # MPa, 1/(℃·일), ℃·일
+FIXED_CURVE_SIGMA = 0.3       # 고정 곡선의 로그 오차 (교차검증 불가 → 기본값)

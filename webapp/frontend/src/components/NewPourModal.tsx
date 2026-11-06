@@ -18,10 +18,9 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
-  const [start, setStart] = useState("");
+  const [time, setTime] = useState(""); // 비우면 그날 측압으로 자동 추정
   const [design, setDesign] = useState("");
-  const [macs, setMacs] = useState<string[]>([]);
-  const [touched, setTouched] = useState({ date: false, macs: false });
+  const [touched, setTouched] = useState({ date: false });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -49,30 +48,29 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   const pressureStart = peeks.filter((p) => p.kind === "pressure")
     .flatMap((p) => p.sensors.map((s) => s.first)).sort()[0] ?? null;
 
-  // 직접 고치기 전에는 파일 내용으로 타설일·센서를 채워 둔다
-  const fileMacKey = [...fileSensors.keys()].sort().join(",");
+  // 직접 고치기 전에는 측압 파일 시작일로 타설일을 채워 둔다
   useEffect(() => {
     if (!touched.date) setDate(pressureStart ? pressureStart.slice(0, 10) : "");
-    if (!touched.macs) setMacs(fileMacKey ? fileMacKey.split(",") : []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pressureStart, fileMacKey]);
+  }, [pressureStart]);
 
-  // DB에 있는 센서 + 파일에만 있는 새 센서
-  const chips = (sensors.data ?? []).map((s) => {
-    const f = fileSensors.get(s.mac);
-    return { mac: s.mac, kind: s.kind, last: f && f.last > s.last ? f.last : s.last, fromFile: !!f };
-  });
-  for (const [mac, f] of fileSensors) {
-    if (!chips.some((c) => c.mac === mac)) chips.push({ mac, kind: f.kind, last: f.last, fromFile: true });
-  }
-
-  const toggle = (mac: string) => {
-    setTouched((t) => ({ ...t, macs: true }));
-    setMacs((m) => (m.includes(mac) ? m.filter((x) => x !== mac) : [...m, mac]));
-  };
+  // 센서는 자동으로 정한다: 올릴 파일이 있으면 파일 속 센서, 없으면 타설일에 데이터가 있는 저장된 센서
+  const start = date && time ? `${date}T${time}` : "";
+  const refDay = date;
+  const macs = fileSensors.size > 0
+    ? [...fileSensors.keys()].sort()
+    : refDay
+      ? (sensors.data ?? []).filter((s) => s.first.slice(0, 10) <= refDay && s.last.slice(0, 10) >= refDay).map((s) => s.mac)
+      : [];
+  const macSource = fileSensors.size > 0 ? "올릴 파일에 있는 센서" : `${refDay}에 데이터가 있는 센서`;
 
   async function submit() {
-    if (!name || macs.length === 0) return setErr("이름과 센서를 선택하세요.");
+    if (!name) return setErr("이름을 입력하세요.");
+    if (macs.length === 0) {
+      return setErr(fileSensors.size === 0 && !refDay
+        ? "CSV 파일을 추가하거나 타설일을 입력하세요. 센서를 자동으로 찾습니다."
+        : `${refDay}에 데이터가 있는 센서가 없습니다. 그날의 CSV를 추가하세요.`);
+    }
     setErr(null);
     let uploads: UploadResult[] = [];
     try {
@@ -90,7 +88,7 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
         name, sensors: macs, pour_start: fromInput(start),
         design_strength: design ? Number(design) : null,
       });
-      if (!start && date) {
+      if (!time && date) {
         setBusy("타설 시점 추정 중…");
         await api.detect(pour.id, `${date}T00:00:00`).catch(() => undefined); // 못 찾으면 상세에서 직접 입력
       }
@@ -139,26 +137,24 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
 
       <label className="field">이름<input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 용인 6회차" /></label>
       <div className="form-row" style={{ alignItems: "start" }}>
-        <label className="field">타설일 (자동 추정용)
-          <input type="date" value={date} onChange={(e) => { setTouched((t) => ({ ...t, date: true })); setDate(e.target.value); }} />
-          {pressureStart && !touched.date && <span className="tiny">측압 파일 시작일로 채웠습니다</span>}
-        </label>
-        <label className="field">타설 시작 (알면 입력)<input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, color: "var(--text-2)" }}>
+          <span>타설 일시</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input type="date" aria-label="타설 날짜" value={date} style={{ flex: 3, minWidth: 0 }}
+              onChange={(e) => { setTouched((t) => ({ ...t, date: true })); setDate(e.target.value); }} />
+            <input type="time" aria-label="타설 시작 시각" value={time} style={{ flex: 2, minWidth: 0 }}
+              onChange={(e) => setTime(e.target.value)} />
+          </div>
+          <span className="tiny">
+            {pressureStart && !touched.date ? "측압 파일 시작일로 날짜를 채웠습니다. " : ""}
+            {time ? "입력한 시각을 타설 시작으로 확정합니다." : "시각을 비우면 그날 측압으로 타설 시작을 자동 추정합니다."}
+          </span>
+        </div>
         <label className="field">설계기준강도 (MPa)<input type="number" value={design} onChange={(e) => setDesign(e.target.value)} placeholder="예: 24" /></label>
       </div>
-      <div className="field">
-        <span className="small muted">
-          센서 선택{fileSensors.size > 0 && " · 올릴 파일에 있는 센서를 골라 두었습니다"}
-        </span>
-        <div className="chips">
-          {chips.map((s) => (
-            <span key={s.mac} className={`chip ${macs.includes(s.mac) ? "on" : ""}`} onClick={() => toggle(s.mac)}>
-              {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압"} ~{fmtDateTime(s.last)}</span>
-              {s.fromFile && <span className="badge info">새 파일</span>}
-            </span>
-          ))}
-        </div>
-      </div>
+      {macs.length > 0 && (
+        <div className="tiny">센서 자동 선택: {macs.join(", ")} ({macSource})</div>
+      )}
       <ErrorBox error={err} />
       <div className="actions">
         <button className="btn" onClick={onClose} disabled={!!busy}>취소</button>

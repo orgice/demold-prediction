@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, Pour, Prediction, StrengthTest, StrengthTestIn } from "../api/client";
 import { Chart, sensorColor, useChartTheme } from "../components/Chart";
 import { ErrorBox, Loading, MilestoneRow, useAsync } from "../components/common";
-import { fmtDateTime, fmtFull, fromInput, hoursBetween, toInput } from "../format";
+import { fmtAge, fmtDateTime, fmtFull, fromInput, hoursBetween, toInput } from "../format";
 
 type Tab = "predict" | "pourtime" | "tests" | "settings";
 const TABS: [Tab, string][] = [
@@ -106,7 +106,10 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
       <details className="card small">
         <summary>모델 정보</summary>
         <div className="muted" style={{ marginTop: 8 }}>
-          {pred.model.method} · 학습 회차 {pred.model.train_pours.join(", ")}번 (이 회차 제외), 공시체 {pred.model.train_specimens}개 ·
+          {pred.model.method} ·{" "}
+          {pred.model.fixed_curve
+            ? "고정 곡선 (학습할 공시체 회차가 2개 미만)"
+            : `학습 회차 ${pred.model.train_pours.join(", ")}번 (이 회차 제외), 공시체 ${pred.model.train_specimens}개`} ·
           곡선 Su={pred.model.params.Su} MPa, k={pred.model.params.k}, M0={pred.model.params.M0} ℃·일 ·
           σ={pred.model.sigma} · {pred.model.forecast}
         </div>
@@ -127,7 +130,23 @@ function StrengthChart({ pred, design }: { pred: Prediction; design: number | nu
   const option = {
     tooltip: {
       trigger: "axis",
-      valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} MPa`),
+      // 커서 위치에 가장 가까운 시점의 강도·범위·적산온도·내부온도를 함께 보여 준다
+      formatter: (params: { seriesName: string; value: number[]; marker: string }[]) => {
+        const x = params[0]?.value[0];
+        if (x == null) return "";
+        const s = pred.series.reduce((a, b) => (Math.abs(day(b.age_h) - x) < Math.abs(day(a.age_h) - x) ? b : a));
+        const f1 = (v: number | null) => (v == null ? "—" : v.toFixed(1));
+        const rows = [
+          `<b>${fmtDateTime(s.t)}</b> · 타설 후 ${fmtAge(s.age_h)}`,
+          `${params.find((p) => p.seriesName.startsWith("예측"))?.marker ?? ""}예측 강도 <b>${f1(s.strength)} MPa</b>`,
+          `90% 범위 ${f1(s.lower)}–${f1(s.upper)} MPa`,
+          `적산온도 <b>${f1(s.maturity)} ℃·일</b>`,
+          `내부온도 ${s.temp == null ? "—" : `${f1(s.temp)} ℃`} (${s.observed ? "관측" : "가정"})`,
+          ...params.filter((p) => p.seriesName === "공시체 시험 결과")
+            .map((p) => `${p.marker}공시체 평균 ${f1(p.value[1])} MPa`),
+        ];
+        return rows.join("<br/>");
+      },
     },
     legend: { data: ["예측 (관측 온도)", "예측 (가정 온도)", "공시체 시험 결과"] },
     xAxis: { type: "value", name: "타설 후 (일)", nameLocation: "middle", nameGap: 28, min: 0, max: 28 },
