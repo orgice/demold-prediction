@@ -43,7 +43,17 @@ export function MilestoneBadge({ m }: { m: Milestone }) {
   return <span className="badge warn">⏳ 예정</span>;
 }
 
-export function MilestoneRow({ m }: { m: Milestone }) {
+/** 최초 예상 대비 늦어짐(+)/빨라짐(−) */
+function delayText(now: number | null, base: number | null | undefined) {
+  if (now == null || base == null) return null;
+  const d = now - base;
+  if (Math.abs(d) < 1) return "최초 예상과 같음";
+  const v = Math.abs(d) < 48 ? `${Math.abs(d).toFixed(0)}시간` : `${(Math.abs(d) / 24).toFixed(1)}일`;
+  return `최초 예상보다 ${v} ${d > 0 ? "늦음" : "빠름"}`;
+}
+
+export function MilestoneRow({ m, baseAgeH }: { m: Milestone; baseAgeH?: number | null }) {
+  const delay = delayText(m.expected_age_h, baseAgeH);
   return (
     <div className="milestone">
       <div>
@@ -57,6 +67,7 @@ export function MilestoneRow({ m }: { m: Milestone }) {
         <MilestoneBadge m={m} />
         <div>{fmtDateTime(m.expected)}</div>
         <div className="tiny">타설 후 {fmtAge(m.expected_age_h)}</div>
+        {delay && <div className="tiny">{delay}</div>}
       </div>
     </div>
   );

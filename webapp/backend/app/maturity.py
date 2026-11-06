@@ -18,7 +18,7 @@ from scipy.optimize import curve_fit
 from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
-from .config import CALIBRATION_MAX_AGE_DAY, DATUM_TEMP, FIXED_CURVE, FIXED_CURVE_SIGMA, THRESHOLDS
+from .config import BASELINE_HOURS, CALIBRATION_MAX_AGE_DAY, DATUM_TEMP, FIXED_CURVE, FIXED_CURVE_SIGMA, THRESHOLDS
 
 STEP = timedelta(minutes=10)
 HORIZON = timedelta(days=28)
@@ -295,4 +295,19 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
             "fixed_curve": model["fixed"],
             "forecast": "기준 시각 이후 온도는 직전 24시간 패턴 반복으로 가정",
         },
+    }
+
+
+def baseline(engine: Engine, pour, all_pours: list, current: dict) -> dict | None:
+    """최초 예상: 타설 후 BASELINE_HOURS 시점에 했을 예측. 현재 기준 시각이 그보다 이르면 None."""
+    t0 = pd.Timestamp(current["start"]) + timedelta(hours=BASELINE_HOURS)
+    if pd.Timestamp(current["as_of"]) <= t0:
+        return None
+    b = predict(engine, pour, all_pours, t0.to_pydatetime())
+    return {
+        "as_of": b["as_of"],
+        "hours": BASELINE_HOURS,
+        "series": [{"age_h": r["age_h"], "strength": r["strength"]} for r in b["series"]],
+        "milestones": [{"label": m["label"], "expected": m["expected"], "expected_age_h": m["expected_age_h"]}
+                       for m in b["milestones"]],
     }

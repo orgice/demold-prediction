@@ -34,6 +34,12 @@ export interface Prediction {
   strength_28d: number;
   design_ratio_28d: number | null;
   milestones: Milestone[];
+  /** 최초 예상: 타설 후 hours 시점에 했을 예측 (현재가 그 이전이면 null) */
+  baseline: {
+    as_of: string; hours: number;
+    series: { age_h: number; strength: number }[];
+    milestones: { label: string; expected: string | null; expected_age_h: number | null }[];
+  } | null;
   series: {
     t: string; age_h: number; observed: boolean; temp: number | null; maturity: number;
     strength: number; lower: number; upper: number;

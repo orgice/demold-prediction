@@ -111,7 +111,9 @@ def prediction(pour_id: int, as_of: datetime | None = Query(None, description="�
     if p is None:
         raise HTTPException(404, "타설 회차를 찾을 수 없습니다.")
     try:
-        return maturity.predict(engine, p, pours, as_of)
+        r = maturity.predict(engine, p, pours, as_of)
+        r["baseline"] = maturity.baseline(engine, p, pours, r)
+        return r
     except maturity.PredictionError as e:
         raise HTTPException(422, str(e))
 

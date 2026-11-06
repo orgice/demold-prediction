@@ -29,6 +29,7 @@ export function useChartTheme() {
     grid: dark ? "#33332f" : "#e6e5e1",
     surface: dark ? "#1a1a19" : "#fcfcfb",
     accent: dark ? "#3987e5" : "#2a78d6",
+    muted: dark ? "#8b93a7" : "#6b7280", // 비교용 기준선 (최초 예상)
   };
 }
 

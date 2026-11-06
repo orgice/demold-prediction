@@ -91,7 +91,10 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
         </div>
         <div className="card">
           <h3 style={{ marginBottom: 12 }}>해체 가능 예상 시각</h3>
-          <div className="milestones">{pred.milestones.map((m) => <MilestoneRow key={m.label} m={m} />)}</div>
+          <div className="milestones">{pred.milestones.map((m) => (
+            <MilestoneRow key={m.label} m={m}
+              baseAgeH={pred.baseline?.milestones.find((b) => b.label === m.label)?.expected_age_h} />
+          ))}</div>
           <div className="tiny" style={{ marginTop: 10 }}>
             벽·기둥 측면 5 MPa, 슬래브 밑면 14 MPa (KCS 14 20 12). 현장 판단은 보수적 시각 기준을 권장합니다.
           </div>
@@ -135,11 +138,13 @@ function StrengthChart({ pred, design }: { pred: Prediction; design: number | nu
         const x = params[0]?.value[0];
         if (x == null) return "";
         const s = pred.series.reduce((a, b) => (Math.abs(day(b.age_h) - x) < Math.abs(day(a.age_h) - x) ? b : a));
+        const base = pred.baseline?.series.find((b) => b.age_h === s.age_h);
         const f1 = (v: number | null) => (v == null ? "—" : v.toFixed(1));
         const rows = [
           `<b>${fmtDateTime(s.t)}</b> · 타설 후 ${fmtAge(s.age_h)}`,
           `${params.find((p) => p.seriesName.startsWith("예측"))?.marker ?? ""}예측 강도 <b>${f1(s.strength)} MPa</b>`,
           `90% 범위 ${f1(s.lower)}–${f1(s.upper)} MPa`,
+          ...(base ? [`${params.find((p) => p.seriesName === "최초 예상")?.marker ?? ""}최초 예상 ${f1(base.strength)} MPa`] : []),
           `적산온도 <b>${f1(s.maturity)} ℃·일</b>`,
           `내부온도 ${s.temp == null ? "—" : `${f1(s.temp)} ℃`} (${s.observed ? "관측" : "가정"})`,
           ...params.filter((p) => p.seriesName === "공시체 시험 결과")
@@ -148,7 +153,7 @@ function StrengthChart({ pred, design }: { pred: Prediction; design: number | nu
         return rows.join("<br/>");
       },
     },
-    legend: { data: ["예측 (관측 온도)", "예측 (가정 온도)", "공시체 시험 결과"] },
+    legend: { data: ["예측 (관측 온도)", "예측 (가정 온도)", ...(pred.baseline ? ["최초 예상"] : []), "공시체 시험 결과"] },
     xAxis: { type: "value", name: "타설 후 (일)", nameLocation: "middle", nameGap: 28, min: 0, max: 28 },
     yAxis: { type: "value", name: "MPa", min: 0 },
     dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
@@ -173,6 +178,11 @@ function StrengthChart({ pred, design }: { pred: Prediction; design: number | nu
         } },
       { name: "예측 (가정 온도)", type: "line", data: fut.map((s) => [day(s.age_h), s.strength]), symbol: "none",
         lineStyle: { width: 2, type: "dashed", color: th.accent }, itemStyle: { color: th.accent } },
+      ...(pred.baseline ? [{ // 타설 후 24시간 시점에 했을 예측 (계획 대비 비교용)
+        name: "최초 예상", type: "line", symbol: "none", z: 1,
+        data: pred.baseline.series.map((b) => [day(b.age_h), b.strength]),
+        lineStyle: { width: 2, type: [8, 5], color: th.muted }, itemStyle: { color: th.muted },
+      }] : []),
       { name: "공시체 시험 결과", type: "scatter", symbolSize: 10,
         data: testMeans(pred, true).map((t) => [day(t.age_h), t.fc]),
         itemStyle: { color: "#eb6834", borderColor: th.surface, borderWidth: 1.5 } },
