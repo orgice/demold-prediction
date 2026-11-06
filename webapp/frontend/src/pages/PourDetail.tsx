@@ -318,6 +318,7 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   const submit = async () => {
     setErr(null);
     if (!form.test_datetime) return setErr("시험 일시를 입력하세요.");
+    if (form.s1 == null) return setErr("평균 압축강도를 입력하세요.");
     try {
       if (editing) await api.updateTest(pour.id, editing, form);
       else await api.addTest(pour.id, form);
@@ -326,7 +327,8 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   };
   const edit = (t: StrengthTest) => {
     setEditing(t.id);
-    setForm({ ...t, test_datetime: t.test_datetime.slice(0, 19) });
+    // 평균 하나만 다룬다: 예전에 3개로 넣은 결과는 평균값으로 바꿔 저장된다
+    setForm({ ...t, test_datetime: t.test_datetime.slice(0, 19), s1: t.average, s2: null, s3: null });
   };
   const remove = async (t: StrengthTest) => {
     if (!confirm(`${fmtFull(t.test_datetime)} 시험 결과를 삭제할까요?`)) return;
@@ -348,10 +350,8 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
             onChange={(e) => setForm({ ...form, nominal_age_day: num(e.target.value) })} /></label>
           <label className="field">양생<select value={form.curing} onChange={(e) => setForm({ ...form, curing: e.target.value as "field" | "water" })}>
             <option value="field">현장양생</option><option value="water">수중양생</option></select></label>
-          {(["s1", "s2", "s3"] as const).map((k, i) => (
-            <label key={k} className="field">공시체 {i + 1} (MPa)<input type="number" step="0.1" value={form[k] ?? ""}
-              onChange={(e) => setForm({ ...form, [k]: num(e.target.value) })} /></label>
-          ))}
+          <label className="field">평균 압축강도 (MPa)<input type="number" step="0.1" value={form.s1 ?? ""}
+            onChange={(e) => setForm({ ...form, s1: num(e.target.value), s2: null, s3: null })} /></label>
         </div>
         <div className="actions" style={{ marginTop: 12 }}>
           {editing && <button className="btn" onClick={() => { setEditing(null); setForm(emptyTest()); }}>취소</button>}
@@ -361,14 +361,13 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
       </div>
       <div className="card table-wrap">
         <table>
-          <thead><tr><th>시험 일시</th><th>재령</th><th>양생</th><th>S1</th><th>S2</th><th>S3</th><th>평균 (MPa)</th><th>비고</th><th /></tr></thead>
+          <thead><tr><th>시험 일시</th><th>재령</th><th>양생</th><th>평균 압축강도 (MPa)</th><th>비고</th><th /></tr></thead>
           <tbody>
             {tests.data?.map((t) => (
               <tr key={t.id}>
                 <td>{fmtFull(t.test_datetime)}</td>
                 <td>{t.nominal_age_day ?? "—"}일</td>
                 <td>{t.curing === "field" ? "현장" : "수중"}</td>
-                <td>{t.s1 ?? "—"}</td><td>{t.s2 ?? "—"}</td><td>{t.s3 ?? "—"}</td>
                 <td><b>{t.average?.toFixed(1) ?? "—"}</b></td>
                 <td className="tiny">{t.note}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
