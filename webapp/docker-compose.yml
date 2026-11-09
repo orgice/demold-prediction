@@ -1,4 +1,8 @@
+# 앱 전체 구성: 컨테이너 3개를 한 번에 띄운다
+#   docker compose -p demold_public up -d --build
+# ${이름:-기본값} 은 webapp/.env 의 값을 쓰고, 없으면 기본값을 쓴다는 뜻
 services:
+  # 데이터베이스 (MariaDB). 데이터는 db-data 볼륨에 저장돼 컨테이너를 꺼도 남는다
   db:
     image: mariadb:11.4
     environment:
@@ -10,11 +14,12 @@ services:
               "--innodb-buffer-pool-size=512M"]
     ports: ["3306:3306"]
     volumes: [db-data:/var/lib/mysql]
-    healthcheck:
+    healthcheck:   # DB가 준비됐는지 5초마다 확인 (준비돼야 backend가 켜짐)
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       retries: 30
 
+  # 백엔드 API 서버 (FastAPI, :8000). backend/Dockerfile로 이미지를 만든다
   backend:
     build: ./backend
     environment:
@@ -32,6 +37,7 @@ services:
       # 초기 적재용 센서 CSV 폴더 (읽기 전용). 데이터는 저장소에 포함되지 않음 → webapp/.env 의 SEED_SENSOR_DIR
       - ${SEED_SENSOR_DIR:-../private_data/sensors}:/seed/sensors:ro
 
+  # 웹 화면 (React + nginx, :8080). /api 요청은 backend로 넘긴다 (frontend/nginx.conf)
   frontend:
     build: ./frontend
     depends_on: [backend]

@@ -1,8 +1,13 @@
+// [화면] AI 상담 ( /assistant )
+// 질문을 보내면 서버의 AI(backend/app/agent.py)가 예측 도구를 불러 답한다.
+// 대화는 이 화면에만 있고 저장되지 않는다 (새로고침하면 사라짐).
 import { useEffect, useRef, useState } from "react";
 import { AgentStep, api, ChatMessage } from "../api/client";
 
+/** 말풍선 하나: 질문 또는 답변 (+ AI가 부른 도구 목록, 걸린 시간, 오류 여부) */
 interface Turn extends ChatMessage { steps?: AgentStep[]; elapsed_ms?: number; error?: boolean }
 
+// 처음 화면에 보여 주는 예시 질문
 const EXAMPLES = [
   "테스트시험 슬래브 언제 떼도 돼?",
   "지금 벽체 해체 가능한 회차는?",
@@ -10,12 +15,14 @@ const EXAMPLES = [
   "5회차 28일 강도가 설계강도에 도달할까?",
 ];
 
+// 도구 이름을 화면에 보여 줄 한국어로 (목록에 없으면 영어 이름 그대로)
 const TOOL_LABEL: Record<string, string> = {
   list_pours: "회차 목록 조회",
   get_prediction: "강도·해체 시각 예측",
   get_temperature_summary: "내부온도 조회",
 };
 
+/** "강도·해체 시각 예측 (pour_id=3)" 같은 도구 호출 설명 */
 function stepText(s: AgentStep) {
   const args = Object.entries(s.args).map(([k, v]) => `${k}=${v}`).join(", ");
   return `${TOOL_LABEL[s.tool] ?? s.tool}${args ? ` (${args})` : ""}`;
@@ -30,6 +37,7 @@ export default function Assistant() {
   // 중괄호 필수: scrollIntoView 가 값을 돌려주는 브라우저에서 React 가 그 값을 정리 함수로 실행하다 죽는다
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [turns, busy]);
 
+  /** 질문 보내기: 화면에 먼저 띄우고, 이전 대화와 함께 서버에 보낸 뒤 답을 붙인다 */
   const send = async (q: string) => {
     const question = q.trim();
     if (!question || busy) return;

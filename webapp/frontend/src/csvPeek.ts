@@ -1,6 +1,7 @@
 // 업로드 전에 CSV를 브라우저에서 훑어 종류·센서·기간을 미리 보여준다.
 // 판별 규칙은 백엔드 ingest.py와 같게 맞춘다 (서버 결과가 최종).
 
+/** 미리보기 결과: 측압/수분, 파일 안 센서별 기간, 전체 기간, 행 수 */
 export interface CsvPeek {
   kind: "pressure" | "moisture";
   sensors: { mac: string; first: string; last: string }[];
@@ -9,9 +10,11 @@ export interface CsvPeek {
   rows: number;
 }
 
+// "9288" → 9288 처럼 따옴표와 공백을 벗긴다
 const unquote = (s: string) => s.trim().replace(/^"|"$/g, "").trim();
 const toIso = (ts: string) => ts.replace(" ", "T").slice(0, 19);
 
+/** CSV를 한 줄씩 끝까지 읽는다 (큰 파일도 메모리에 다 올리지 않고 흘려 읽음). */
 export async function peekCsv(file: File): Promise<CsvPeek> {
   const reader = file.stream().pipeThrough(new TextDecoderStream()).getReader();
   let rest = "";
@@ -20,6 +23,7 @@ export async function peekCsv(file: File): Promise<CsvPeek> {
   let rows = 0;
   const macs = new Map<string, { first: string; last: string; n: number }>();
 
+  // 한 줄 처리: 첫 줄은 컬럼 이름, 나머지는 센서별 처음·마지막 시각을 기록
   const line = (l: string) => {
     if (!l.trim()) return;
     const cells = l.split(",");
@@ -42,6 +46,7 @@ export async function peekCsv(file: File): Promise<CsvPeek> {
     }
   };
 
+  // 파일을 조각 단위로 읽어 줄로 나눈다. 조각 끝의 잘린 줄은 rest에 남겨 다음 조각과 이어 붙인다
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -51,6 +56,7 @@ export async function peekCsv(file: File): Promise<CsvPeek> {
   }
   line(rest);
 
+  // 종류 판별: 백엔드 ingest.py의 detect_kind와 같은 규칙
   const cols = new Set<string>(header ?? []);
   if (iMac < 0 || iTs < 0) throw new Error("mac, timestamp 컬럼이 없는 CSV입니다.");
   let kind: CsvPeek["kind"];

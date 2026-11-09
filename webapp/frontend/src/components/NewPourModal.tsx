@@ -1,11 +1,16 @@
+// [창] 새 타설 등록 (타설 이력·데이터 업로드 화면에서 열림)
+// 입력: CSV 파일(선택), 이름, 타설 일시(날짜 + 선택 시각), 설계기준강도
+// 센서는 묻지 않고 자동으로 정한다 (파일 속 센서, 또는 그날 데이터가 있는 센서)
 import { useEffect, useRef, useState } from "react";
 import { api, Pour, UploadResult } from "../api/client";
 import { CsvPeek, peekCsv } from "../csvPeek";
 import { fmtDateTime, fromInput } from "../format";
 import { ErrorBox, Modal, useAsync } from "./common";
 
+/** 올릴 파일 하나 + 미리 읽은 내용(peek) 또는 읽기 오류 */
 interface FileItem { file: File; peek?: CsvPeek; error?: string }
 
+/** 등록 결과: 만든 회차와 업로드 결과 */
 export interface NewPourResult { pour: Pour; uploads: UploadResult[] }
 
 /** 새 타설 등록. 올릴 CSV를 함께 받으면 업로드 → 타설 생성 → 자동 추정 순으로 처리한다. */
@@ -25,6 +30,7 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   const [busy, setBusy] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
+  /** 파일 추가: 같은 파일은 한 번만, 추가하자마자 브라우저에서 미리 읽어 센서·기간을 보여 준다 */
   const add = (list: File[]) => {
     const csv = list.filter((f) => f.name.toLowerCase().endsWith(".csv"));
     const same = (a: File, b: File) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
@@ -37,6 +43,7 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => add(initialFiles), []);
 
+  // 미리 읽은 파일들에서 센서 목록과 측압 시작 시각을 모은다
   const peeks = files.flatMap((f) => (f.peek ? [f.peek] : []));
   const reading = files.some((f) => !f.peek && !f.error);
   const fileSensors = new Map<string, { kind: CsvPeek["kind"]; last: string }>();
@@ -64,6 +71,10 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
       : [];
   const macSource = fileSensors.size > 0 ? "올릴 파일에 있는 센서" : `${refDay}에 데이터가 있는 센서`;
 
+  /**
+   * 등록 버튼: ① 파일이 있으면 업로드(서버 저장·10분 집계) → ② 회차 생성
+   * → ③ 시각 없이 날짜만 넣었으면 그날 측압으로 타설 시작을 자동 추정 (못 찾아도 등록은 됨)
+   */
   async function submit() {
     if (!name) return setErr("이름을 입력하세요.");
     if (macs.length === 0) {

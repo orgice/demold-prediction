@@ -1,3 +1,6 @@
+// [화면] 데이터 업로드 ( /upload )
+// 기본: CSV를 끌어다 놓으면 새 타설 등록 창(NewPourModal)이 열려 업로드와 회차 등록을 한 번에 한다.
+// 기존 회차에 이어지는 데이터는 '타설 등록 없이 파일만 올리기'로 올린다.
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Pour, UploadResult } from "../api/client";
@@ -6,21 +9,23 @@ import NewPourModal, { NewPourResult } from "../components/NewPourModal";
 import { fmtFull } from "../format";
 
 export default function Upload() {
-  const history = useAsync(api.uploads, []);
-  const [files, setFiles] = useState<File[]>([]);
-  const [over, setOver] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState<UploadResult[] | null>(null);
+  const history = useAsync(api.uploads, []);                       // 업로드 기록 표
+  const [files, setFiles] = useState<File[]>([]);                  // '파일만 올리기'로 고른 파일
+  const [over, setOver] = useState(false);                         // 파일을 끌고 드롭존 위에 있는지
+  const [busy, setBusy] = useState(false);                         // 업로드 중
+  const [results, setResults] = useState<UploadResult[] | null>(null);   // 방금 올린 결과
   const [err, setErr] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
   const [pending, setPending] = useState<File[]>([]); // 팝업에 넘길 파일
-  const [created, setCreated] = useState<Pour | null>(null);
+  const [created, setCreated] = useState<Pour | null>(null);     // 방금 등록한 회차 (완료 알림용)
   const input = useRef<HTMLInputElement>(null);
 
+  /** 고른 파일 중 .csv만 목록에 더한다 */
   const add = (list: FileList | null) => {
     if (!list) return;
     setFiles((f) => [...f, ...Array.from(list).filter((x) => x.name.toLowerCase().endsWith(".csv"))]);
   };
+  /** '파일만 올리기': 회차 등록 없이 업로드만 */
   const submit = async () => {
     setBusy(true); setErr(null); setResults(null); setCreated(null);
     try {
@@ -30,8 +35,10 @@ export default function Upload() {
     finally { setBusy(false); }
   };
 
+  /** 새 타설 등록 창 열기 (고른 파일을 넘김) */
   const openRegister = (list: File[]) => { setPending(list); setRegistering(true); };
 
+  /** 등록 창이 끝났을 때: 완료 알림을 띄우고 기록을 새로 불러온다 */
   const registered = ({ pour, uploads }: NewPourResult) => {
     setRegistering(false);
     setCreated(pour);
