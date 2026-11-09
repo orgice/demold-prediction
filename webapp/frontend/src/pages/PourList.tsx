@@ -1,3 +1,5 @@
+// [화면] 타설 이력 ( /pours )
+// 회차마다 카드 한 장: 현재 예측 강도, 해체 기준별 예상 시각, 28일 강도. 카드를 누르면 회차 상세로.
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
@@ -6,8 +8,8 @@ import NewPourModal from "../components/NewPourModal";
 import { fmtAge, fmtDateTime, fmtFull } from "../format";
 
 export default function PourList() {
-  const { data, error, loading } = useAsync(api.summary, []);
-  const [creating, setCreating] = useState(false);
+  const { data, error, loading } = useAsync(api.summary, []);   // 회차별 예측 요약
+  const [creating, setCreating] = useState(false);              // 새 타설 등록 창이 열려 있는지
   const nav = useNavigate();
 
   return (

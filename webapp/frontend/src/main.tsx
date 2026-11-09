@@ -1,3 +1,12 @@
+// 화면(프론트엔드)의 시작점.
+// 맨 위 메뉴 막대와, 주소(URL)에 따라 어떤 화면(pages/)을 보여 줄지 정한다.
+//   /            현재 공사      pages/Home.tsx
+//   /pours       타설 이력      pages/PourList.tsx
+//   /pours/3     회차 상세      pages/PourDetail.tsx  (3 = 회차 번호)
+//   /sensors     센서 데이터    pages/Sensors.tsx
+//   /upload      데이터 업로드  pages/Upload.tsx
+//   /assistant   AI 상담        pages/Assistant.tsx
+// 서버와 주고받는 함수는 api/client.ts 에 모여 있다.
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
@@ -9,6 +18,7 @@ import Sensors from "./pages/Sensors";
 import Upload from "./pages/Upload";
 import "./styles.css";
 
+/** 앱 전체 틀: 위쪽 메뉴 + 주소에 맞는 화면 */
 function App() {
   return (
     <BrowserRouter>
@@ -34,6 +44,7 @@ function App() {
   );
 }
 
+// index.html의 <div id="root"> 안에 앱을 그린다
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

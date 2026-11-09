@@ -1,3 +1,5 @@
+// [화면] 현재 공사 ( / )
+// 진행 중인 회차(타설 후 28일 이내)의 상세 화면을 바로 보여 준다. 여러 건이면 위에서 고른다.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Pour } from "../api/client";
@@ -8,10 +10,12 @@ import PourDetail from "./PourDetail";
 // 타설 후 28일(설계기준강도 확인 시점)이 지나지 않은 회차를 '진행 중'으로 본다
 const ACTIVE_DAYS = 28;
 
+/** 회차의 타설 시작: 확정값이 있으면 그것, 없으면 자동 추정값 */
 function startOf(p: Pour) {
   return p.pour_start ?? p.detected_start;
 }
 
+/** 진행 중인 회차인지 (타설 시작 후 28일 이내) */
 export function isActive(p: Pour, now = Date.now()) {
   const s = startOf(p);
   if (!s) return false;
@@ -26,6 +30,7 @@ export default function Home() {
   if (error) return <main className="page"><ErrorBox error={error} /></main>;
   if (!data) return <main className="page"><Loading /></main>;
 
+  // 진행 중인 회차를 최근 타설 순으로
   const active = data.filter((p) => isActive(p))
     .sort((a, b) => new Date(startOf(b)!).getTime() - new Date(startOf(a)!).getTime());
 
@@ -43,6 +48,7 @@ export default function Home() {
     );
   }
 
+  // 고른 회차, 고르지 않았으면 가장 최근 회차. 상세 화면(PourDetail)을 그대로 재사용한다
   const current = active.find((p) => p.id === picked) ?? active[0];
   return (
     <>

@@ -53,6 +53,7 @@ TABLE_NOTES = [
 
 
 def page_lines(page) -> tuple[str | None, list[str]]:
+    """PDF 한 쪽의 글자를 줄 단위로 뽑고, 머리글에서 쪽 번호를 찾는다. 반환: (쪽 번호, 본문 줄들)."""
     lines = [PUA.sub("", l).strip() for l in page.get_text().splitlines()]
     lines = [l for l in lines if l]
     page_no = None
@@ -63,11 +64,13 @@ def page_lines(page) -> tuple[str | None, list[str]]:
 
 
 def build():
+    """PDF 전체를 절(2.1, 2.1.1 …) 단위로, 길면 700자 안팎으로 잘라 JSON으로 저장한다."""
     doc = fitz.open(PDF)
     chunks, buf, chapter, section = [], [], "", ""
     buf_pages: list[str] = []
 
     def flush():
+        """지금까지 모은 줄들(buf)을 조각 하나로 저장 (40자 미만은 버림)."""
         text = "\n".join(l for _, l in buf).strip()
         if len(text) >= 40:
             pages = sorted({p for p, _ in buf if p}, key=int)

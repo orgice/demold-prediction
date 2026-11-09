@@ -1,3 +1,10 @@
+// [화면] 회차 상세 ( /pours/3 ) — 현재 공사 화면도 이것을 그대로 쓴다
+// 위쪽: 회차 이름·타설 시작·센서. 아래: 탭 4개
+//   강도 예측       PredictionTab  (예측 강도, 해체 가능 시각, 그래프)
+//   타설 시점 확인  PourTimeTab    (타설일 측압 그래프, 실제 타설 시각 입력)
+//   공시체 결과     TestsTab       (압축강도 시험 결과 입력)
+//   설정            SettingsTab    (이름·현장·설계강도·메모, 회차 삭제)
+// 지금 탭은 주소 뒤 ?tab=... 에 기록돼 새로고침해도 유지된다.
 import { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, Pour, Prediction, StrengthTest, StrengthTestIn } from "../api/client";
@@ -6,6 +13,7 @@ import { ErrorBox, Loading, MilestoneRow, useAsync } from "../components/common"
 import { fmtAge, fmtDateTime, fmtFull, fromInput, hoursBetween, toInput } from "../format";
 
 type Tab = "predict" | "pourtime" | "tests" | "settings";
+// [탭 이름(주소용), 화면에 보이는 글자]
 const TABS: [Tab, string][] = [
   ["predict", "강도 예측"], ["pourtime", "타설 시점 확인"], ["tests", "공시체 결과"], ["settings", "설정"],
 ];
@@ -19,6 +27,7 @@ export default function PourDetail({ pourId, live }: { pourId?: number; live?: b
   const tab = (TABS.find(([k]) => k === params.get("tab"))?.[0] ?? "predict") as Tab;
   const setTab = (t: Tab) => setParams(t === "predict" ? {} : { tab: t }, { replace: true });
   const [version, setVersion] = useState(0); // 저장 후 예측 다시 계산
+  // 다른 탭에서 저장하면: 회차 정보를 다시 불러오고, 강도 예측도 새로 계산하게 한다
   const changed = () => { pour.reload(); setVersion((v) => v + 1); };
 
   if (pour.error) return <main className="page"><ErrorBox error={pour.error} /></main>;
@@ -50,6 +59,7 @@ export default function PourDetail({ pourId, live }: { pourId?: number; live?: b
 }
 
 // ---------------- 강도 예측 ----------------
+/** 강도 예측 탭: KPI 3개(현재 강도·28일 강도·보정) → 예측 곡선과 해체 시각 → 내부온도 → 모델 정보 */
 function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
   const latest = useAsync(() => api.prediction(pour.id), [pour.id, version]);
   if (latest.error) return <ErrorBox error={latest.error} />;
@@ -121,6 +131,11 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
   );
 }
 
+/**
+ * 압축강도 예측 곡선. x축 = 타설 후 일수, y축 = MPa
+ * 실선 = 관측 온도로 계산, 점선 = 가정 온도로 계산, 음영 = 90% 범위,
+ * 회색 긴 점선 = 최초 예상(타설 후 24시간 시점의 예측), 주황 점 = 공시체, 가로 점선 = 5·14 MPa·설계강도
+ */
 function StrengthChart({ pred, design }: { pred: Prediction; design: number | null }) {
   const th = useChartTheme();
   const day = (h: number) => +(h / 24).toFixed(3);
@@ -209,6 +224,7 @@ function testMeans(pred: Prediction, used: boolean) {
   return [...groups.values()].map((g) => ({ age_h: g.age_h, fc: +(g.sum / g.n).toFixed(2) }));
 }
 
+/** 콘크리트 내부온도 그래프: 실선 = 관측, 점선 = 가정한 미래 온도(직전 24시간 반복) */
 function TempChart({ pred }: { pred: Prediction }) {
   const th = useChartTheme();
   const day = (h: number) => +(h / 24).toFixed(3);
@@ -228,6 +244,7 @@ function TempChart({ pred }: { pred: Prediction }) {
 }
 
 // ---------------- 타설 시점 확인 ----------------
+/** 타설 시점 확인 탭: 타설일 1분 측압 그래프(추정·확정 시각 표시) + 실제 타설 시각 입력 */
 function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   const th = useChartTheme();
   const day = useAsync(() => api.pourDay(pour.id), [pour.id, pour.detected_start, pour.pour_start]);
@@ -236,6 +253,7 @@ function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  /** 확정 시각 저장 (null을 보내면 확정 해제 → 자동 추정값으로 돌아감) */
   const save = async (s: string | null, e: string | null) => {
     setErr(null);
     try {
@@ -244,6 +262,7 @@ function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
       onSaved();
     } catch (x) { setErr((x as Error).message); }
   };
+  /** 저장된 타설일로 자동 추정을 다시 돌린다 */
   const redetect = async () => {
     setErr(null);
     try { await api.detect(pour.id); setMsg("자동 추정을 다시 했습니다."); onSaved(); }
@@ -314,10 +333,12 @@ function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
 }
 
 // ---------------- 공시체 결과 ----------------
+/** 빈 입력칸 (현장양생 기본) */
 const emptyTest = (): StrengthTestIn => ({
   test_datetime: "", nominal_age_day: null, curing: "field", s1: null, s2: null, s3: null, note: null,
 });
 
+/** 공시체 결과 탭: 평균 압축강도 하나를 입력. 현장양생 결과는 이 회차 예측 보정에 쓰인다 */
 function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   const tests = useAsync(() => api.tests(pour.id), [pour.id]);
   const [form, setForm] = useState<StrengthTestIn>(emptyTest());
@@ -395,6 +416,7 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
 }
 
 // ---------------- 설정 ----------------
+/** 설정 탭: 이름·현장·설계기준강도·메모 수정, 회차 삭제 (센서 데이터는 남음) */
 function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   const nav = useNavigate();
   const [f, setF] = useState({

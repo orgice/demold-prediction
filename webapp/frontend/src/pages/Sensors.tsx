@@ -1,9 +1,12 @@
+// [화면] 센서 데이터 ( /sensors )
+// 타설 회차를 고르면 그 회차 센서들의 측정값을 항목별 그래프로 보여 준다.
 import { useEffect, useState } from "react";
 import { api, Metric, Pour, SeriesResponse } from "../api/client";
 import { Chart, sensorColor } from "../components/Chart";
 import { ErrorBox, Loading, useAsync } from "../components/common";
 import { addHours, fmtFull } from "../format";
 
+// 그래프 목록 (위에서부터 이 순서). 데이터가 없는 항목은 그래프를 그리지 않는다
 const PANELS: { metric: Metric; title: string; unit: string }[] = [
   { metric: "temp_in", title: "콘크리트 내부온도 (채널 1~3 평균)", unit: "℃" },
   { metric: "weight_kg", title: "측압 (kg 환산, 60kg 초과 제거)", unit: "kg" },
@@ -19,10 +22,10 @@ const DAY_H = 24;
 const iso19 = (s: string) => s.slice(0, 19);
 
 export default function Sensors() {
-  const sensors = useAsync(api.sensors, []);
-  const pours = useAsync(api.pours, []);
-  const [pourId, setPourId] = useState<number | null>(null);
-  const [macs, setMacs] = useState<string[]>([]);
+  const sensors = useAsync(api.sensors, []);                   // 전체 센서 목록 (데이터 기간 포함)
+  const pours = useAsync(api.pours, []);                       // 회차 목록
+  const [pourId, setPourId] = useState<number | null>(null);   // 고른 회차
+  const [macs, setMacs] = useState<string[]>([]);              // 켜 둔 센서
   const [data, setData] = useState<SeriesResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,6 +42,7 @@ export default function Sensors() {
   const allMacs = sensors.data?.map((s) => s.mac) ?? [];
   const pourSensors = (sensors.data ?? []).filter((s) => pour?.sensors.includes(s.mac));
 
+  // 조회 기간 = [타설 하루 전, 타설 후 28일] 과 [센서 데이터 처음, 끝] 이 겹치는 구간
   let period: { start: string; end: string } | null = null;
   if (pour && pourSensors.length > 0) {
     const first = pourSensors.map((s) => iso19(s.first)).sort()[0];
@@ -53,6 +57,7 @@ export default function Sensors() {
   const pourKey = `${pour?.id}:${pourSensors.map((s) => s.mac).join(",")}`;
   useEffect(() => { setMacs(pourSensors.map((s) => s.mac)); }, [pourKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 센서·기간이 바뀌면 그래프 데이터를 다시 불러온다 (0.3초 기다려 연속 클릭 시 한 번만)
   useEffect(() => {
     if (macs.length === 0 || !period) return setData(null);
     setLoading(true); setErr(null);
@@ -63,6 +68,7 @@ export default function Sensors() {
     return () => clearTimeout(t);
   }, [macs, period?.start, period?.end]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** 센서 칩을 누르면 켜고 끈다 */
   const toggle = (mac: string) => setMacs((m) => (m.includes(mac) ? m.filter((x) => x !== mac) : [...m, mac]));
 
   return (

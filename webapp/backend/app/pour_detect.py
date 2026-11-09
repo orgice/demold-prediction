@@ -9,14 +9,18 @@
 
 방법:
 1. 센서별 1분 측압(5분 이동중앙값)이 직전 30분 최저값보다 3 kg 이상 오른 시점을 '상승' 후보로 잡는다.
-   시작은 그 상승이 출발한 시점(직전 30분 최저값 근처를 떠난 분)으로 되짚는다.
+   시작은 평활 전 1분 값이 '상승 직전 수준(10~20분 전 중앙값) + 1 kg'을 넘어 그대로 유지된 첫 분으로 되짚는다.
 2. 30분 안에 몰린 상승들을 한 묶음으로 보고 점수를 매긴다:
    상승 폭 합 × (센서 2개 이상이 함께 오르면 2배) × (내부온도가 5분 새 1.5℃ 이상 변하면 2배)
    상승 뒤 측압이 1.5 kg 미만이면(오류값에서 0으로 돌아온 것) 상승으로 보지 않는다.
    측압 센서가 하나뿐인 회차는 '함께 오름' 조건을 따지지 않는다.
 3. 점수가 가장 높은 묶음의 첫 상승이 타설 시작, 그 뒤 6시간(센서 재부팅 전까지) 안에서
    측압 합이 가장 높은 시점이 타설 종료.
-재부팅(정상 온도 → −127) 전후 10분은 후보에서 뺀다. 처음부터 −127인 미연결 구간은 재부팅으로 보지 않는다. 추정값은 확인용이며, 사용자가 화면에서 확정값을 입력할 수 있다.
+재부팅(정상 온도 → −127) 전후 10분은 후보에서 뺀다. 처음부터 −127인 미연결 구간은 재부팅으로 보지 않는다.
+추정값은 확인용이며, 사용자가 화면에서 확정값을 입력할 수 있다.
+
+검증 (2026-11-09): 협력사 2026년 시험 타설 5회차에서 측압·온도로 본 시각과 0~1분 차이.
+실제 작업일지 시각과는 아직 비교하지 못했다.
 """
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -34,7 +38,7 @@ GROUP_MIN = 30           # 분: 이 안에 시작한 상승들은 같은 타설�
 TEMP_JUMP_C = 1.5        # 5분 사이 내부온도 변화폭 (콘크리트가 센서보다 차가우면 내려간다)
 MIN_LEVEL_KG = 1.5       # 상승 뒤 측압이 이 값 이상이어야 함 (오류값에서 0으로 돌아오는 것은 타설이 아님)
 RESET_GUARD = 10         # 분: 센서 재부팅 전후 제외
-END_SEARCH_H = 6
+END_SEARCH_H = 6         # 시간: 타설 종료를 찾는 범위 (시작 후)
 
 
 def load_pressure_minutes(engine: Engine, macs: list[str], start: datetime, end: datetime) -> pd.DataFrame:
@@ -55,13 +59,14 @@ def load_pressure_minutes(engine: Engine, macs: list[str], start: datetime, end:
 
 @dataclass
 class Detection:
+    """추정 결과. start/end가 None이면 타설을 찾지 못한 것. 나머지는 근거 확인용."""
     start: datetime | None
     end: datetime | None
     sensors: list[str] = field(default_factory=list)   # 함께 오른 센서
-    rise_kg: float = 0.0
-    temp_jump: bool = False
-    score: float = 0.0
-    candidates: int = 0
+    rise_kg: float = 0.0                               # 함께 오른 센서들의 상승폭 합
+    temp_jump: bool = False                            # 내부온도가 뛰었는지
+    score: float = 0.0                                 # 묶음 점수 (가장 높은 묶음이 뽑힘)
+    candidates: int = 0                                # 후보 묶음 수
     events: list = field(default_factory=list)          # (시작, 센서, 상승 kg)
 
 
@@ -101,19 +106,21 @@ def detect_from_raw(raw: pd.DataFrame, pour_date: datetime, gram_sensors: set[st
     if not macs:
         return Detection(None, None)
 
+    # guard: 재부팅 전후 10분 (이 구간의 변화는 믿지 않는다)
     guard = (reset.any(axis=1).astype(int)
              .rolling(2 * RESET_GUARD + 1, center=True, min_periods=1).max().astype(bool))
-    smooth = kg[macs].rolling(5, min_periods=2).median()
-    base = smooth.rolling(BASE_WINDOW, min_periods=5).min().shift(1)
-    rise = smooth - base
+    smooth = kg[macs].rolling(5, min_periods=2).median()            # 5분 이동중앙값 (튀는 값 완화)
+    base = smooth.rolling(BASE_WINDOW, min_periods=5).min().shift(1)  # 직전 30분 최저값
+    rise = smooth - base                                              # 최저값보다 얼마나 올랐나
     tin_s = tin.rolling(3, min_periods=1).mean()
+    # tjump: 5분 사이 내부온도가 1.5℃ 이상 변한 분 (센서별 True/False)
     tjump = ((tin_s - tin_s.shift(5)).abs() >= TEMP_JUMP_C) & ~guard.to_numpy()[:, None]
 
     # 1. 센서별 상승 시작점
     events = []
     for m in macs:
         r = rise[m]
-        hit = (r >= STEP_KG) & (r.shift(1) < STEP_KG) & ~guard
+        hit = (r >= STEP_KG) & (r.shift(1) < STEP_KG) & ~guard   # 3 kg 선을 아래→위로 넘은 분
         for t in r.index[hit.fillna(False).to_numpy()]:
             if t < t0:
                 continue
@@ -136,7 +143,7 @@ def detect_from_raw(raw: pd.DataFrame, pour_date: datetime, gram_sensors: set[st
     if not events:
         return Detection(None, None)
 
-    # 2. 묶음별 점수
+    # 2. 묶음별 점수: 시간순으로 놓고, 첫 상승에서 30분 안에 시작한 상승끼리 한 묶음
     events.sort()
     groups, cur = [], [events[0]]
     for e in events[1:]:
@@ -176,6 +183,7 @@ def detect_from_raw(raw: pd.DataFrame, pour_date: datetime, gram_sensors: set[st
 
 
 def detect_pour(engine: Engine, pour_date: datetime, macs: list[str]) -> tuple[datetime | None, datetime | None]:
+    """DB에서 타설일의 측압 원본을 읽어 추정한다. 반환: (시작, 종료). 못 찾으면 (None, None)."""
     if not macs:
         return None, None
     day = pd.Timestamp(pour_date).normalize()

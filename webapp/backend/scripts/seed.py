@@ -17,11 +17,12 @@ from app.ingest import ingest_csv
 from app.models import Pour, StrengthTest, UploadLog
 from app.pour_detect import detect_pour
 
-SEED = Path(__file__).resolve().parents[1] / "seed"
+SEED = Path(__file__).resolve().parents[1] / "seed"   # backend/seed 폴더
 
 
 
 def load_sensors(folder: Path):
+    """폴더(하위 폴더 포함)의 모든 CSV를 업로드 화면과 같은 방식(ingest_csv)으로 적재한다."""
     for f in sorted(folder.rglob("*.csv")):
         t = time.time()
         r = ingest_csv(engine, f.read_bytes(), f.name)
@@ -35,6 +36,10 @@ def load_sensors(folder: Path):
 
 
 def load_pours():
+    """seed/pours.csv의 회차를 만들고, 측압으로 타설 시각을 추정하고, strength.csv의 공시체를 붙인다.
+
+    이름이 같은 회차가 이미 있으면 건너뛴다.
+    """
     if not (SEED / "pours.csv").exists():
         print("  seed/pours.csv 가 없어 타설 회차 적재를 건너뜁니다 (형식: seed/pours.example.csv)")
         return

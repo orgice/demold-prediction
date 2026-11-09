@@ -1,15 +1,19 @@
+// 그래프 공통 부품. 모든 그래프는 ECharts 라이브러리로 그리고, 여기서 색·축·툴팁 모양을 맞춘다.
 import ReactECharts from "echarts-for-react";
 import { useEffect, useState } from "react";
 
 // 센서 색은 항상 같은 MAC에 같은 색 (순위가 아니라 대상에 따라)
 const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+// 특정 센서에 색을 고정하고 싶으면 여기에 적는다. 예: "9288": "#2a78d6"
 const FIXED: Record<string, string> = {
 
 };
+/** 센서 색: 고정 색이 있으면 그것, 없으면 목록 순서(i)로 팔레트에서 고른다 */
 export function sensorColor(mac: string, i = 0): string {
   return FIXED[mac] ?? PALETTE[(i + 4) % PALETTE.length];
 }
 
+/** 컴퓨터가 다크 모드인지 (바뀌면 그래프 색도 바로 바뀜) */
 function useDark() {
   const q = window.matchMedia("(prefers-color-scheme: dark)");
   const [dark, setDark] = useState(q.matches);
@@ -21,6 +25,7 @@ function useDark() {
   return dark;
 }
 
+/** 다크/라이트 모드에 맞는 그래프 색 모음 */
 export function useChartTheme() {
   const dark = useDark();
   return {
@@ -42,6 +47,7 @@ export function Chart({ option, height = 320 }: { option: Record<string, unknown
     splitLine: { lineStyle: { color: th.grid } },
     nameTextStyle: { color: th.text },
   };
+  // 화면마다 준 x축·y축 설정에 공통 축 색을 덧입힌다 (축이 여러 개면 각각)
   const merge = (a: unknown) =>
     Array.isArray(a) ? a.map((x) => ({ ...axis, ...x })) : a ? { ...axis, ...(a as object) } : a;
   const base = {

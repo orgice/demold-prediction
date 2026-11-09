@@ -1,7 +1,14 @@
+// 여러 화면에서 같이 쓰는 작은 부품들 (데이터 불러오기, 오류·로딩 표시, 창, 해체 시각 표시).
 import { DependencyList, ReactNode, useCallback, useEffect, useState } from "react";
 import type { Milestone } from "../api/client";
 import { fmtAge, fmtDateTime } from "../format";
 
+/**
+ * 서버에서 데이터를 불러오는 공통 도구.
+ * 반환: data(결과), error(오류 문구), loading(불러오는 중), reload(다시 불러오기)
+ * deps(두 번째 인자)의 값이 바뀌면 자동으로 다시 불러온다.
+ * 예) const pours = useAsync(api.pours, []);
+ */
 export function useAsync<T>(fn: () => Promise<T>, deps: DependencyList) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -17,14 +24,17 @@ export function useAsync<T>(fn: () => Promise<T>, deps: DependencyList) {
   return { data, error, loading, reload, setData };
 }
 
+/** 빨간 오류 상자 (오류가 없으면 아무것도 안 그림) */
 export function ErrorBox({ error }: { error: string | null }) {
   return error ? <div className="alert error">{error}</div> : null;
 }
 
+/** "불러오는 중…" 같은 회색 안내 글자 */
 export function Loading({ text = "불러오는 중…" }: { text?: string }) {
   return <div className="muted small">{text}</div>;
 }
 
+/** 화면 위에 뜨는 창. 바깥 어두운 부분을 누르면 닫힌다 */
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="modal-bg" onClick={onClose}>
@@ -52,6 +62,7 @@ function delayText(now: number | null, base: number | null | undefined) {
   return `최초 예상보다 ${v} ${d > 0 ? "늦음" : "빠름"}`;
 }
 
+/** 해체 가능 예상 시각 카드의 한 줄 (벽체 5 MPa 등). baseAgeH = 최초 예상의 도달 시간 */
 export function MilestoneRow({ m, baseAgeH }: { m: Milestone; baseAgeH?: number | null }) {
   const delay = delayText(m.expected_age_h, baseAgeH);
   return (

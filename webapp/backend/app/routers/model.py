@@ -1,3 +1,9 @@
+"""강도 곡선 정보 API.
+
+'강도 ↔ 적산온도' 관계(모델 곡선) 자체를 보여 준다. 회차와 상관없이 하나인 곡선이다.
+(회차별 '시간 ↔ 강도' 예측은 routers/pours.py의 /prediction)
+지금은 화면에서 쓰지 않고 API(/docs)로만 확인할 수 있다.
+"""
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -26,6 +32,7 @@ def curve(s: Session = Depends(get_session)):
         raise HTTPException(422, str(e))
     params = model["params"]
     z = maturity.Z90
+    # 학습에 쓰인 공시체 점들 (그래프에 찍기용)
     specimens = []
     for p in pours:
         if p.id not in model["pour_ids"]:
@@ -40,6 +47,7 @@ def curve(s: Session = Depends(get_session)):
     S = maturity.hyperbolic(grid, *params)
     sigma = model["sigma_uncal"]
 
+    # 해체 기준(5·14 MPa)마다 필요한 적산온도와, 온도가 일정할 때 걸리는 시간
     targets = []
     for label, thr in [("벽체 해체", THRESHOLDS["wall"]), ("슬래브 해체", THRESHOLDS["slab"])]:
         m = needed_maturity(params, thr)

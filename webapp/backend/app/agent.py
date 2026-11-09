@@ -23,6 +23,7 @@ from . import guideline, maturity
 from .db import engine
 from .models import Pour
 
+# LLM 서버 설정 (webapp/.env). OpenAI와 같은 형식(/v1/chat/completions)의 서버면 어디든 쓸 수 있다.
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "").rstrip("/")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen")
@@ -31,20 +32,24 @@ HISTORY_LIMIT = 10     # 이전 대화는 최근 10개 메시지만 보낸다 (�
 
 
 class AgentError(RuntimeError):
+    """LLM 서버 설정이 없거나 연결에 실패했을 때."""
     pass
 
 
 # ---------------------------------------------------------------- 도구 (실제 실행되는 함수)
 
 def _all_pours(s: Session) -> list[Pour]:
+    """모든 회차 (공시체 결과 포함)."""
     return list(s.scalars(select(Pour).options(selectinload(Pour.tests)).order_by(Pour.id)))
 
 
 def _fmt(t) -> str | None:
+    """시각을 LLM이 읽기 쉬운 '2026-03-16 14:14' 형태로."""
     return None if t is None else pd.Timestamp(t).strftime("%Y-%m-%d %H:%M")
 
 
 def tool_list_pours(s: Session) -> dict:
+    """[도구] 회차 목록. AI가 '3회차' 같은 이름을 pour_id로 바꿀 때 쓴다."""
     return {"pours": [{
         "pour_id": p.id, "name": p.name, "site": p.site,
         "pour_start": _fmt(p.start),
@@ -55,6 +60,7 @@ def tool_list_pours(s: Session) -> dict:
 
 
 def tool_get_prediction(s: Session, pour_id: int, as_of: str | None = None) -> dict:
+    """[도구] 회차 하나의 강도 예측과 해체 시각 (maturity.predict 결과를 요약)."""
     pours = _all_pours(s)
     p = next((x for x in pours if x.id == pour_id), None)
     if p is None:
@@ -84,6 +90,7 @@ def tool_get_prediction(s: Session, pour_id: int, as_of: str | None = None) -> d
 
 
 def tool_get_temperature_summary(s: Session, pour_id: int, hours: int = 24, until: str | None = None) -> dict:
+    """[도구] 회차 센서의 내부온도 요약 (until 이전 hours 시간의 마지막·최저·최고·평균)."""
     p = next((x for x in _all_pours(s) if x.id == pour_id), None)
     if p is None:
         return {"error": f"pour_id {pour_id} 회차가 없습니다."}
@@ -109,6 +116,7 @@ def tool_get_temperature_summary(s: Session, pour_id: int, hours: int = 24, unti
 
 
 def tool_search_guideline(s: Session, query: str, k: int = 4) -> dict:
+    """[도구] 해체 가이드라인 문서 검색 (guideline.py). 인덱스 파일이 없으면 결과가 비어 있다."""
     hits = guideline.search(query, k=max(1, min(int(k), 6)))
     if not hits:
         return {"results": [], "note": "가이드라인에서 관련 내용을 찾지 못했습니다."}
@@ -159,6 +167,7 @@ TOOLS = [
         }, "required": ["query"]},
     }},
 ]
+# LLM이 고른 도구 이름 → 실제로 실행할 파이썬 함수
 TOOL_FUNCS = {
     "list_pours": tool_list_pours,
     "get_prediction": tool_get_prediction,
@@ -168,6 +177,7 @@ TOOL_FUNCS = {
 
 
 def system_prompt() -> str:
+    """AI의 역할과 지켜야 할 원칙. 매 질문마다 대화 맨 앞에 붙는다."""
     now = datetime.utcnow() + timedelta(hours=9)
     return f"""당신은 '탈형 상담 에이전트'입니다. 건설 현장 담당자에게 거푸집 해체 시점을 안내합니다.
 현재 시각: {now:%Y-%m-%d %H:%M} (한국 시간)
@@ -188,6 +198,7 @@ def system_prompt() -> str:
 # ---------------------------------------------------------------- LLM 호출
 
 def call_llm(messages: list[dict]) -> dict:
+    """LLM 서버에 대화를 보내고 답(문장 또는 도구 호출 요청)을 받는다. 최대 90초 기다린다."""
     if not LLM_BASE_URL or not LLM_API_KEY:
         raise AgentError("LLM_BASE_URL / LLM_API_KEY 가 설정되지 않았습니다. webapp/.env 를 확인하세요.")
     body = json.dumps({
@@ -211,6 +222,7 @@ def call_llm(messages: list[dict]) -> dict:
 # ---------------------------------------------------------------- 에이전트 루프
 
 def run_agent(s: Session, question: str, history: list[dict]) -> dict:
+    """질문 하나를 처리한다. 반환: {"answer": 답변, "steps": 도구 호출 기록}."""
     messages = [{"role": "system", "content": system_prompt()}]
     messages += [{"role": m["role"], "content": m["content"]} for m in history[-HISTORY_LIMIT:]
                  if m.get("role") in ("user", "assistant") and m.get("content")]
