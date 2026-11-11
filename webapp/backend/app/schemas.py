@@ -9,7 +9,9 @@ DB 테이블 정의는 models.py에 따로 있다.
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+Member = Literal["wall", "slab"]   # 부재 종류: 벽·기둥 / 슬래브
 
 
 class StrengthTestIn(BaseModel):
@@ -39,6 +41,7 @@ class PourIn(BaseModel):
     pour_start: datetime | None = None               # 확정된 타설 시작 (모르면 비움 → 자동 추정)
     pour_end: datetime | None = None
     design_strength: float | None = Field(None, gt=0, le=200)   # 설계기준강도(MPa), 배합표 값
+    member: Member | None = None                     # 부재 종류
     sensors: list[str] = []                          # 이 회차에 쓴 센서 MAC 목록
     note: str | None = None
 
@@ -50,6 +53,7 @@ class PourPatch(BaseModel):
     pour_start: datetime | None = None
     pour_end: datetime | None = None
     design_strength: float | None = Field(None, gt=0, le=200)
+    member: Member | None = None
     sensors: list[str] | None = None
     note: str | None = None
 
@@ -65,6 +69,7 @@ class PourOut(BaseModel):
     detected_start: datetime | None
     detected_end: datetime | None
     design_strength: float | None
+    member: str | None
     sensors: list[str]
     note: str | None
     test_count: int                                  # 입력된 공시체 시험 수
@@ -88,3 +93,23 @@ class UploadOut(BaseModel):
     period_start: datetime | None
     period_end: datetime | None
     sensors: list[str]
+
+
+class ExclusionIn(BaseModel):
+    """예측 계산에서 뺄 구간 입력."""
+    start: datetime
+    end: datetime
+    reason: str | None = Field(None, max_length=255)
+
+    @model_validator(mode="after")
+    def check_order(self):
+        if self.end <= self.start:
+            raise ValueError("종료 시각은 시작 시각보다 뒤여야 합니다.")
+        return self
+
+
+class ExclusionOut(ExclusionIn):
+    """제외 구간 응답."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    pour_id: int

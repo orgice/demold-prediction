@@ -9,6 +9,7 @@ pressure / moisture 테이블은 협력사 MariaDB 스키마와 컬럼명을 맞
     sensor_10min   위 두 원본을 정제해 10분 단위로 모은 값  ← 그래프·예측은 이것만 쓴다
     pour           타설 회차 (이름, 타설 시각, 사용 센서, 설계강도)
     strength_test  공시체 압축강도 시험 결과 (회차마다 여러 건)
+    excluded_range 예측 계산에서 뺄 측정 구간 (센서 이상·탈형 작업). 원본은 그대로 둔다
     upload_log     CSV 업로드 기록
 
 각 클래스가 테이블 하나이고, `컬럼명: Mapped[파이썬 타입] = mapped_column(DB 타입)` 한 줄이 컬럼 하나다.
@@ -93,6 +94,7 @@ class Pour(Base):
     detected_start: Mapped[datetime | None] = mapped_column(DateTime)  # 측압 자동 추정
     detected_end: Mapped[datetime | None] = mapped_column(DateTime)
     design_strength: Mapped[float | None] = mapped_column(Float)    # 설계기준강도 (MPa)
+    member: Mapped[str | None] = mapped_column(String(10))         # 부재 종류: wall(벽·기둥) / slab(슬래브)
     sensors: Mapped[str] = mapped_column(String(500), default="")   # 쉼표 구분 MAC
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -100,6 +102,9 @@ class Pour(Base):
     # 이 회차의 공시체 결과들 (회차를 지우면 같이 지워짐)
     tests: Mapped[list["StrengthTest"]] = relationship(
         back_populates="pour", cascade="all, delete-orphan", order_by="StrengthTest.test_datetime")
+    # 예측 계산에서 뺄 구간들
+    exclusions: Mapped[list["ExcludedRange"]] = relationship(
+        back_populates="pour", cascade="all, delete-orphan", order_by="ExcludedRange.start")
 
     @property
     def sensor_list(self) -> list[str]:
@@ -137,6 +142,18 @@ class StrengthTest(Base):
         """강도 평균 (MPa). 값이 없으면 None."""
         v = self.values
         return round(sum(v) / len(v), 2) if v else None
+
+
+class ExcludedRange(Base):
+    """예측 계산에서 뺄 측정 구간. 원본 센서 데이터는 고치지 않고, 이 구간의 온도만 앞뒤 값으로 이어 계산한다."""
+    __tablename__ = "excluded_range"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pour_id: Mapped[int] = mapped_column(ForeignKey("pour.id", ondelete="CASCADE"))
+    start: Mapped[datetime] = mapped_column(DateTime)
+    end: Mapped[datetime] = mapped_column(DateTime)
+    reason: Mapped[str | None] = mapped_column(String(255))       # 예: 탈형 작업, 센서 이상
+
+    pour: Mapped[Pour] = relationship(back_populates="exclusions")
 
 
 class UploadLog(Base):

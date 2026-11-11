@@ -1,8 +1,8 @@
-// [창] 새 타설 등록 (타설 이력·데이터 업로드 화면에서 열림)
-// 입력: CSV 파일(선택), 이름, 타설 일시(날짜 + 선택 시각), 설계기준강도
-// 센서는 묻지 않고 자동으로 정한다 (파일 속 센서, 또는 그날 데이터가 있는 센서)
+// [창] 새 타설 등록 (대시보드·타설 이력·센서 데이터 화면에서 열림) — 화면설계서 8쪽
+// 입력: CSV 파일(선택), 이름, 부재 종류, 타설 일시(날짜 + 선택 시각), 설계기준강도, 센서
+// 센서는 자동으로 미리 고른다 (파일 속 센서, 또는 그날 데이터가 있는 센서). 직접 뺀 센서는 파일을 더해도 유지한다.
 import { useEffect, useRef, useState } from "react";
-import { api, Pour, UploadResult } from "../api/client";
+import { api, Member, MEMBER_LABEL, Pour, UploadResult } from "../api/client";
 import { CsvPeek, peekCsv } from "../csvPeek";
 import { fmtDateTime, fromInput } from "../format";
 import { ErrorBox, Modal, useAsync } from "./common";
@@ -10,8 +10,11 @@ import { ErrorBox, Modal, useAsync } from "./common";
 /** 올릴 파일 하나 + 미리 읽은 내용(peek) 또는 읽기 오류 */
 interface FileItem { file: File; peek?: CsvPeek; error?: string }
 
-/** 등록 결과: 만든 회차와 업로드 결과 */
-export interface NewPourResult { pour: Pour; uploads: UploadResult[] }
+/** 등록 결과: 만든 회차, 업로드 결과, 타설 시각을 못 정했는지 (그러면 '타설 시점 확인' 탭으로 보낸다) */
+export interface NewPourResult { pour: Pour; uploads: UploadResult[]; needsTime: boolean }
+
+/** 등록 후 이동할 주소: 시작 시각을 못 찾았으면 타설 시점 확인 탭 */
+export const pourUrl = ({ pour, needsTime }: NewPourResult) => `/pours/${pour.id}${needsTime ? "?tab=pourtime" : ""}`;
 
 /** 새 타설 등록. 올릴 CSV를 함께 받으면 업로드 → 타설 생성 → 자동 추정 순으로 처리한다. */
 export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
@@ -25,6 +28,8 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   const [date, setDate] = useState("");
   const [time, setTime] = useState(""); // 비우면 그날 측압으로 자동 추정
   const [design, setDesign] = useState("");
+  const [member, setMember] = useState<Member | "">("");
+  const [unpicked, setUnpicked] = useState<string[]>([]); // 사용자가 직접 뺀 센서 (파일을 더해도 유지)
   const [touched, setTouched] = useState({ date: false });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -64,11 +69,12 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   // 센서는 자동으로 정한다: 올릴 파일이 있으면 파일 속 센서, 없으면 타설일에 데이터가 있는 저장된 센서
   const start = date && time ? `${date}T${time}` : "";
   const refDay = date;
-  const macs = fileSensors.size > 0
+  const candidates = fileSensors.size > 0
     ? [...fileSensors.keys()].sort()
     : refDay
       ? (sensors.data ?? []).filter((s) => s.first.slice(0, 10) <= refDay && s.last.slice(0, 10) >= refDay).map((s) => s.mac)
       : [];
+  const macs = candidates.filter((m) => !unpicked.includes(m));
   const macSource = fileSensors.size > 0 ? "올릴 파일에 있는 센서" : `${refDay}에 데이터가 있는 센서`;
 
   /**
@@ -76,12 +82,12 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
    * → ③ 시각 없이 날짜만 넣었으면 그날 측압으로 타설 시작을 자동 추정 (못 찾아도 등록은 됨)
    */
   async function submit() {
-    if (!name) return setErr("이름을 입력하세요.");
-    if (macs.length === 0) {
-      return setErr(fileSensors.size === 0 && !refDay
+    if (candidates.length === 0) {
+      return setErr(!name ? "이름과 센서를 선택하세요." : fileSensors.size === 0 && !refDay
         ? "CSV 파일을 추가하거나 타설일을 입력하세요. 센서를 자동으로 찾습니다."
         : `${refDay}에 데이터가 있는 센서가 없습니다. 그날의 CSV를 추가하세요.`);
     }
+    if (!name.trim() || macs.length === 0) return setErr("이름과 센서를 선택하세요.");
     setErr(null);
     let uploads: UploadResult[] = [];
     try {
@@ -96,14 +102,17 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
     try {
       setBusy("타설 등록 중…");
       const pour = await api.createPour({
-        name, sensors: macs, pour_start: fromInput(start),
-        design_strength: design ? Number(design) : null,
+        name: name.trim(), sensors: macs, pour_start: fromInput(start),
+        design_strength: design ? Number(design) : null, member: member || null,
       });
+      let needsTime = !time;
       if (!time && date) {
         setBusy("타설 시점 추정 중…");
-        await api.detect(pour.id, `${date}T00:00:00`).catch(() => undefined); // 못 찾으면 상세에서 직접 입력
+        const found = await api.detect(pour.id, `${date}T00:00:00`).catch(() => null);
+        needsTime = !found?.detected_start;
+        if (needsTime) alert("회차는 등록됐지만 타설 시작 시각을 찾지 못했습니다. 이어지는 '타설 시점 확인'에서 직접 입력하세요.");
       }
-      onDone({ pour, uploads });
+      onDone({ pour, uploads, needsTime });
     } catch (e) {
       // 업로드가 끝난 뒤 실패하면 데이터는 이미 저장돼 있으니 파일을 비우고 다시 등록하게 한다
       setErr(uploads.length > 0
@@ -163,9 +172,27 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
         </div>
         <label className="field">설계기준강도 (MPa)<input type="number" value={design} onChange={(e) => setDesign(e.target.value)} placeholder="예: 24" /></label>
       </div>
-      {macs.length > 0 && (
-        <div className="tiny">센서 자동 선택: {macs.join(", ")} ({macSource})</div>
-      )}
+      <label className="field">부재 종류
+        <select value={member} onChange={(e) => setMember(e.target.value as Member | "")}>
+          <option value="">미지정 (5·14 MPa 모두 표시)</option>
+          {(Object.keys(MEMBER_LABEL) as Member[]).map((m) => <option key={m} value={m}>{MEMBER_LABEL[m]} ({m === "wall" ? "5" : "14"} MPa)</option>)}
+        </select>
+      </label>
+      <div className="field">
+        <span className="small muted">센서</span>
+        {candidates.length > 0 ? (
+          <div className="chips">
+            {candidates.map((m) => (
+              <label key={m} className={`chip ${macs.includes(m) ? "on" : ""}`}>
+                <input type="checkbox" style={{ margin: 0 }} checked={macs.includes(m)} disabled={!!busy}
+                  onChange={() => setUnpicked((u) => (u.includes(m) ? u.filter((x) => x !== m) : [...u, m]))} />
+                {m}
+              </label>
+            ))}
+          </div>
+        ) : <span className="tiny">CSV를 추가하거나 타설일을 입력하면 센서를 찾아 미리 선택합니다.</span>}
+        {candidates.length > 0 && <span className="tiny">{macSource}을 미리 골랐습니다. 뺄 센서는 체크를 해제하세요.</span>}
+      </div>
       <ErrorBox error={err} />
       <div className="actions">
         <button className="btn" onClick={onClose} disabled={!!busy}>취소</button>

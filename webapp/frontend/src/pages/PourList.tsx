@@ -2,9 +2,9 @@
 // 회차마다 카드 한 장: 현재 예측 강도, 해체 기준별 예상 시각, 28일 강도. 카드를 누르면 회차 상세로.
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, MEMBER_LABEL } from "../api/client";
 import { ErrorBox, Loading, MilestoneBadge, useAsync } from "../components/common";
-import NewPourModal from "../components/NewPourModal";
+import NewPourModal, { pourUrl } from "../components/NewPourModal";
 import { fmtAge, fmtDateTime, fmtFull } from "../format";
 
 export default function PourList() {
@@ -23,12 +23,13 @@ export default function PourList() {
       </div>
       <ErrorBox error={error} />
       {loading && <Loading text="예측 계산 중…" />}
-      <div className="grid cols-2">
+      {data?.length === 0 && <div className="alert info">등록된 회차가 없습니다. ‘새 타설 등록’으로 시작하세요.</div>}
+      <div className="grid cols-3">
         {data?.map(({ pour, error, current_strength, strength_28d, milestones, as_of, design_ratio_28d }) => (
           <Link key={pour.id} to={`/pours/${pour.id}`} className="card" style={{ color: "inherit" }}>
             <div className="card-head">
               <div>
-                <h2>{pour.name}</h2>
+                <h2>{pour.name}{pour.member && <span className="badge neutral" style={{ marginLeft: 6, verticalAlign: "middle" }}>{MEMBER_LABEL[pour.member]}</span>}</h2>
                 <div className="tiny">
                   타설 {fmtFull(pour.pour_start ?? pour.detected_start)}{" "}
                   {pour.pour_start ? <span className="badge good">확정</span> : <span className="badge warn">자동 추정</span>}
@@ -66,7 +67,7 @@ export default function PourList() {
           </Link>
         ))}
       </div>
-      {creating && <NewPourModal onClose={() => setCreating(false)} onDone={({ pour }) => nav(`/pours/${pour.id}`)} />}
+      {creating && <NewPourModal onClose={() => setCreating(false)} onDone={(r) => nav(pourUrl(r))} />}
     </main>
   );
 }

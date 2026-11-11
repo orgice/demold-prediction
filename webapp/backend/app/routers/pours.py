@@ -6,6 +6,7 @@
 - /prediction   강도 예측 (maturity.py)
 - /pour-day     타설일 측압 그래프
 - /tests        공시체 결과 입력·수정·삭제
+- /exclusions   예측 계산에서 뺄 측정 구간 (원본 데이터는 그대로)
 
 데이터가 바뀌는 API는 끝에 maturity.clear_cache()를 불러 예측을 새로 계산하게 한다.
 """
@@ -17,9 +18,10 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import maturity
 from ..db import engine, get_session
-from ..models import Pour, StrengthTest
+from ..models import ExcludedRange, Pour, StrengthTest
 from ..pour_detect import detect_pour, load_pressure_minutes
-from ..schemas import PourIn, PourOut, PourPatch, StrengthTestIn, StrengthTestOut
+from ..schemas import (ExclusionIn, ExclusionOut, PourIn, PourOut, PourPatch, StrengthTestIn,
+                       StrengthTestOut)
 
 router = APIRouter(prefix="/api/pours", tags=["타설"])
 
@@ -28,18 +30,18 @@ def to_out(p: Pour) -> PourOut:
     """DB의 회차를 화면에 보낼 모양(PourOut)으로 바꾼다."""
     return PourOut(id=p.id, name=p.name, site=p.site, pour_start=p.pour_start, pour_end=p.pour_end,
                    detected_start=p.detected_start, detected_end=p.detected_end,
-                   design_strength=p.design_strength, sensors=p.sensor_list, note=p.note,
+                   design_strength=p.design_strength, member=p.member, sensors=p.sensor_list, note=p.note,
                    test_count=len(p.tests))
 
 
 def all_pours(s: Session) -> list[Pour]:
     """모든 회차를 공시체 결과와 함께 불러온다 (예측 모델 학습에 전체 회차가 필요)."""
-    return list(s.scalars(select(Pour).options(selectinload(Pour.tests)).order_by(Pour.id)))
+    return list(s.scalars(select(Pour).options(selectinload(Pour.tests), selectinload(Pour.exclusions)).order_by(Pour.id)))
 
 
 def get_pour(s: Session, pour_id: int) -> Pour:
     """회차 하나. 없으면 404 오류."""
-    p = s.get(Pour, pour_id, options=[selectinload(Pour.tests)])
+    p = s.get(Pour, pour_id, options=[selectinload(Pour.tests), selectinload(Pour.exclusions)])
     if p is None:
         raise HTTPException(404, "타설 회차를 찾을 수 없습니다.")
     return p
@@ -192,5 +194,34 @@ def delete_test(pour_id: int, test_id: int, s: Session = Depends(get_session)):
     if t is None or t.pour_id != pour_id:
         raise HTTPException(404, "공시체 결과를 찾을 수 없습니다.")
     s.delete(t)
+    s.commit()
+    maturity.clear_cache()
+
+
+# ---------- 제외 구간 ----------
+@router.get("/{pour_id}/exclusions", response_model=list[ExclusionOut])
+def list_exclusions(pour_id: int, s: Session = Depends(get_session)):
+    """이 회차에서 예측 계산에 쓰지 않는 구간 목록."""
+    return get_pour(s, pour_id).exclusions
+
+
+@router.post("/{pour_id}/exclusions", response_model=ExclusionOut, status_code=201)
+def add_exclusion(pour_id: int, body: ExclusionIn, s: Session = Depends(get_session)):
+    """제외 구간 추가. 원본 센서 데이터는 지우지 않고, 예측할 때만 이 구간 온도를 앞뒤 값으로 잇는다."""
+    get_pour(s, pour_id)
+    e = ExcludedRange(pour_id=pour_id, **body.model_dump())
+    s.add(e)
+    s.commit()
+    maturity.clear_cache()
+    return e
+
+
+@router.delete("/{pour_id}/exclusions/{exclusion_id}", status_code=204)
+def delete_exclusion(pour_id: int, exclusion_id: int, s: Session = Depends(get_session)):
+    """제외 취소."""
+    e = s.get(ExcludedRange, exclusion_id)
+    if e is None or e.pour_id != pour_id:
+        raise HTTPException(404, "제외 구간을 찾을 수 없습니다.")
+    s.delete(e)
     s.commit()
     maturity.clear_cache()
