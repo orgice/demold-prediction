@@ -12,10 +12,18 @@ export interface Pour {
   detected_start: string | null;
   detected_end: string | null;
   design_strength: number | null;
+  member: Member | null;            // 부재 종류: wall(벽·기둥) / slab(슬래브)
   sensors: string[];
   note: string | null;
   test_count: number;
 }
+
+export type Member = "wall" | "slab";
+export const MEMBER_LABEL: Record<Member, string> = { wall: "벽·기둥", slab: "슬래브" };
+
+/** 예측 계산에서 뺀 측정 구간 (원본 데이터는 그대로) */
+export interface Exclusion { id: number; pour_id: number; start: string; end: string; reason: string | null }
+export type ExclusionIn = Omit<Exclusion, "id" | "pour_id">;
 
 /** 해체 기준 하나(벽체 5 MPa 등)의 도달 시각들. *_age_h = 타설 후 몇 시간 */
 export interface Milestone {
@@ -161,6 +169,12 @@ export const api = {
     request<StrengthTest>(`/api/pours/${id}/tests/${testId}`, json("PUT", body)),
   deleteTest: (id: number, testId: number) =>
     request<void>(`/api/pours/${id}/tests/${testId}`, { method: "DELETE" }),
+  // 제외 구간
+  exclusions: (id: number) => request<Exclusion[]>(`/api/pours/${id}/exclusions`),
+  addExclusion: (id: number, body: ExclusionIn) =>
+    request<Exclusion>(`/api/pours/${id}/exclusions`, json("POST", body)),
+  deleteExclusion: (id: number, exId: number) =>
+    request<void>(`/api/pours/${id}/exclusions/${exId}`, { method: "DELETE" }),
   // 센서 데이터·업로드 (routers/sensors.py)
   sensors: () => request<SensorInfo[]>("/api/sensors"),
   series: (macs: string[], start: string, end: string) => {

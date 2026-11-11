@@ -1,10 +1,18 @@
-// [화면] 센서 데이터 ( /sensors )
-// 타설 회차를 고르면 그 회차 센서들의 측정값을 항목별 그래프로 보여 준다.
+// [화면] 센서 데이터 ( /sensors ) — 화면설계서 13쪽, 수행계획서 센서데이터 메뉴
+//   ① 타설 회차로 이동: 회차를 고르면 그 회차 센서와 '타설 전날 ~ 타설 후 29일'로 기간을 맞춘다
+//   ② 시작일·종료일 (45일 넘으면 1시간 평균, 최대 400일)
+//   ③ 센서 칩: MAC·종류·수집 기간을 보고 여러 센서를 켜고 끈다
+//   ④ 지표별 그래프 (데이터가 없는 지표는 생략, 결측 구간은 선이 끊김)
+//   아래: 센서 데이터 불러오기 (CSV 업로드 · 새 타설 등록)
+// 주소에 ?pour=3 을 붙이면 3번 회차로 바로 연다 (회차 설정의 '원본 보기').
 import { useEffect, useState } from "react";
-import { api, Metric, Pour, SeriesResponse } from "../api/client";
+import { useSearchParams } from "react-router-dom";
+import { api, Pour, SeriesResponse } from "../api/client";
 import { Chart, sensorColor } from "../components/Chart";
 import { ErrorBox, Loading, useAsync } from "../components/common";
-import { addHours, fmtFull } from "../format";
+import UploadPanel from "../components/UploadPanel";
+import { addHours, fmtDateTime, hoursBetween } from "../format";
+import type { Metric } from "../api/client";
 
 // 그래프 목록 (위에서부터 이 순서). 데이터가 없는 항목은 그래프를 그리지 않는다
 const PANELS: { metric: Metric; title: string; unit: string }[] = [
@@ -12,110 +20,120 @@ const PANELS: { metric: Metric; title: string; unit: string }[] = [
   { metric: "weight_kg", title: "측압 (kg 환산, 60kg 초과 제거)", unit: "kg" },
   { metric: "temp_out", title: "외기온도", unit: "℃" },
   { metric: "humi", title: "외기습도", unit: "%" },
-  { metric: "c_mo", title: "내부 수분 c_mo (측압장치, rawMo=4095 제외)", unit: "" },
-  { metric: "uf_val", title: "콘크리트 수분 uf_val (수분센서)", unit: "%" },
+  { metric: "c_mo", title: "측압장치 내부 수분 c_mo (rawMo=4095 제외)", unit: "" },
+  { metric: "uf_val", title: "수분센서 수분값 uf_val", unit: "%" },
 ];
 
-
-// 회차의 조회 기간: 타설 하루 전 ~ 타설 후 28일 중 그 회차 센서에 데이터가 있는 구간
-const DAY_H = 24;
-const iso19 = (s: string) => s.slice(0, 19);
+const MAX_DAYS = 400;
+const startOf = (p: Pour) => p.pour_start ?? p.detected_start;
+const dateOf = (iso: string) => iso.slice(0, 10);
 
 export default function Sensors() {
-  const sensors = useAsync(api.sensors, []);                   // 전체 센서 목록 (데이터 기간 포함)
-  const pours = useAsync(api.pours, []);                       // 회차 목록
-  const [pourId, setPourId] = useState<number | null>(null);   // 고른 회차
-  const [macs, setMacs] = useState<string[]>([]);              // 켜 둔 센서
+  const sensors = useAsync(api.sensors, []);
+  const pours = useAsync(api.pours, []);
+  const [params, setParams] = useSearchParams();
+  const [pourId, setPourId] = useState<number | null>(params.get("pour") ? Number(params.get("pour")) : null);
+  const [from, setFrom] = useState("");          // 시작일 (YYYY-MM-DD)
+  const [to, setTo] = useState("");              // 종료일 (포함)
+  const [macs, setMacs] = useState<string[]>([]);
   const [data, setData] = useState<SeriesResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [inited, setInited] = useState(false);
 
-  const startOf = (p: Pour) => p.pour_start ?? p.detected_start;
-  // 처음 열면 타설 시작이 가장 최근인 회차
-  useEffect(() => {
-    if (pourId != null || !pours.data?.length) return;
-    const sorted = [...pours.data].sort((a, b) => ((startOf(a) ?? "") < (startOf(b) ?? "") ? 1 : -1));
-    setPourId(sorted[0].id);
-  }, [pours.data, pourId]);
-
+  const all = sensors.data ?? [];
+  const allMacs = all.map((s) => s.mac);
   const pour = pours.data?.find((p) => p.id === pourId) ?? null;
-  const allMacs = sensors.data?.map((s) => s.mac) ?? [];
-  const pourSensors = (sensors.data ?? []).filter((s) => pour?.sensors.includes(s.mac));
 
-  // 조회 기간 = [타설 하루 전, 타설 후 28일] 과 [센서 데이터 처음, 끝] 이 겹치는 구간
-  let period: { start: string; end: string } | null = null;
-  if (pour && pourSensors.length > 0) {
-    const first = pourSensors.map((s) => iso19(s.first)).sort()[0];
-    const last = pourSensors.map((s) => iso19(s.last)).sort().reverse()[0];
-    const s = startOf(pour);
-    const from = s ? [addHours(s, -DAY_H), first].sort()[1] : first;
-    const to = s ? [addHours(s, 28 * DAY_H), last].sort()[0] : last;
-    period = from <= to ? { start: from, end: to } : null;
-  }
+  /** 회차로 이동: 그 회차 센서 + 타설 전날 ~ 타설 후 29일 */
+  const goPour = (p: Pour) => {
+    setPourId(p.id);
+    setParams({ pour: String(p.id) }, { replace: true });
+    const s = startOf(p);
+    if (s) { setFrom(dateOf(addHours(s, -24))); setTo(dateOf(addHours(s, 29 * 24))); }
+    setMacs(p.sensors.filter((m) => allMacs.includes(m)));
+  };
 
-  // 회차가 바뀌면 그 회차 센서를 모두 켠다
-  const pourKey = `${pour?.id}:${pourSensors.map((s) => s.mac).join(",")}`;
-  useEffect(() => { setMacs(pourSensors.map((s) => s.mac)); }, [pourKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 센서·기간이 바뀌면 그래프 데이터를 다시 불러온다 (0.3초 기다려 연속 클릭 시 한 번만)
+  // 첫 화면: 주소의 회차, 없으면 최신 측정이 있는 센서 1개의 마지막 30일
   useEffect(() => {
-    if (macs.length === 0 || !period) return setData(null);
+    if (inited || !sensors.data || !pours.data) return;
+    setInited(true);
+    const p = pours.data.find((x) => x.id === pourId);
+    if (p) return goPour(p);
+    const latest = [...sensors.data].sort((a, b) => (a.last < b.last ? 1 : -1))[0];
+    if (!latest) return;
+    setMacs([latest.mac]);
+    setTo(dateOf(latest.last));
+    setFrom(dateOf(addHours(latest.last.slice(0, 19), -29 * 24)));
+  }, [sensors.data, pours.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const start = from ? `${from}T00:00:00` : "";
+  const end = to ? `${dateOf(addHours(`${to}T00:00:00`, 24))}T00:00:00` : "";
+  const days = start && end ? hoursBetween(start, end) / 24 : 0;
+  const rangeError = !start || !end ? null : days <= 0 ? "종료일은 시작일과 같거나 뒤여야 합니다."
+    : days > MAX_DAYS ? `한 번에 ${MAX_DAYS}일까지 조회할 수 있습니다.` : null;
+
+  // 센서·기간이 바뀌면 다시 불러온다 (0.3초 기다려 연속 클릭 시 한 번만)
+  useEffect(() => {
+    if (macs.length === 0 || !start || !end || rangeError) { setData(null); return; }
     setLoading(true); setErr(null);
     const t = setTimeout(() => {
-      api.series(macs, period!.start, period!.end)
-        .then(setData).catch((e) => setErr(e.message)).finally(() => setLoading(false));
+      api.series(macs, start, end).then(setData).catch((e) => setErr(e.message)).finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(t);
-  }, [macs, period?.start, period?.end]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [macs.join(","), start, end, rangeError]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** 센서 칩을 누르면 켜고 끈다 */
   const toggle = (mac: string) => setMacs((m) => (m.includes(mac) ? m.filter((x) => x !== mac) : [...m, mac]));
+  // 회차 센서를 앞에, 나머지는 최근 수집 순
+  const chipOrder = [...all].sort((a, b) =>
+    Number(pour?.sensors.includes(b.mac) ?? 0) - Number(pour?.sensors.includes(a.mac) ?? 0) || (a.last < b.last ? 1 : -1));
 
   return (
     <main className="page">
       <div className="page-head">
         <div>
           <h1>센서 데이터</h1>
-          <div className="muted small">타설 회차를 고르면 그 회차 센서의 타설 하루 전~28일 데이터를 보여 줍니다. 10분 중앙값 (45일 넘으면 1시간 평균). 드래그·휠로 확대할 수 있습니다.</div>
+          <div className="muted small">10분 중앙값 (45일이 넘으면 1시간 평균). 그래프는 드래그·휠과 아래 슬라이더로 확대합니다.</div>
         </div>
       </div>
-      {pours.data?.length === 0 && <div className="alert info">등록된 타설 회차가 없습니다. 데이터 업로드에서 새 타설을 등록하세요.</div>}
-      {pour && (
-        <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div className="form-row">
-            <label className="field">타설 회차
-              <select value={pour.id} onChange={(e) => setPourId(Number(e.target.value))}>
-                {pours.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
-            <div className="small">
-              <div className="tiny">타설 시작</div>
-              {fmtFull(startOf(pour))}{" "}
-              {pour.pour_start ? <span className="badge good">확정</span>
-                : pour.detected_start ? <span className="badge warn">자동 추정</span> : <span className="badge bad">없음</span>}
-            </div>
-            <div className="small">
-              <div className="tiny">조회 기간</div>
-              {period ? `${fmtFull(period.start)} ~ ${fmtFull(period.end)}` : "이 회차 센서에 해당 기간 데이터가 없습니다"}
-            </div>
-          </div>
-          <div className="chips">
-            {pourSensors.map((s) => (
-              <span key={s.mac} className={`chip ${macs.includes(s.mac) ? "on" : ""}`} onClick={() => toggle(s.mac)}>
-                <span className="dot" style={{ background: sensorColor(s.mac, allMacs.indexOf(s.mac)) }} />
-                {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압"}</span>
-              </span>
-            ))}
-            {pourSensors.length === 0 && <span className="tiny">이 회차 센서의 데이터가 없습니다.</span>}
-          </div>
+
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="form-row">
+          <label className="field">타설 회차로 이동
+            <select value={pourId ?? ""} onChange={(e) => { const p = pours.data?.find((x) => x.id === Number(e.target.value)); if (p) goPour(p); }}>
+              <option value="" disabled>회차 선택</option>
+              {pours.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <label className="field">시작일<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+          <label className="field">종료일<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
         </div>
-      )}
-      <ErrorBox error={err ?? sensors.error} />
+        {pour && (
+          <div className="tiny">
+            {pour.name} 타설 시작 {fmtDateTime(startOf(pour))} {pour.pour_start ? "(확정)" : pour.detected_start ? "(자동 추정)" : "(없음)"}
+            {" "}· 연결 센서 {pour.sensors.join(", ") || "없음"}
+          </div>
+        )}
+        <div className="chips" aria-label="센서 선택">
+          {chipOrder.map((s) => (
+            <button key={s.mac} type="button" className={`chip ${macs.includes(s.mac) ? "on" : ""}`} aria-pressed={macs.includes(s.mac)}
+              onClick={() => toggle(s.mac)} title={`${fmtDateTime(s.first)} ~ ${fmtDateTime(s.last)}`}>
+              <span className="dot" style={{ background: sensorColor(s.mac, allMacs.indexOf(s.mac)) }} />
+              {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압"} · {fmtDateTime(s.first).split(" ")[0]}~{fmtDateTime(s.last).split(" ")[0]}</span>
+            </button>
+          ))}
+          {sensors.data?.length === 0 && <span className="tiny">저장된 센서 데이터가 없습니다. 아래에서 CSV를 불러오세요.</span>}
+        </div>
+        <ErrorBox error={rangeError} />
+      </div>
+
+      <ErrorBox error={err ?? sensors.error ?? pours.error} />
       {loading && <Loading />}
+      {!loading && macs.length === 0 && all.length > 0 && <div className="alert info">센서를 하나 이상 선택하세요.</div>}
+      {data && Object.keys(data.sensors).length === 0 && <div className="alert info">선택한 기간에 이 센서들의 기록이 없습니다.</div>}
       {data && PANELS.map(({ metric, title, unit }) => {
         const series = Object.entries(data.sensors).filter(([, s]) => s[metric]);
         if (series.length === 0) return null;
-        const allMacs = sensors.data?.map((s) => s.mac) ?? [];
         return (
           <div className="card" key={metric}>
             <h3 style={{ marginBottom: 4 }}>{title}</h3>
@@ -136,7 +154,8 @@ export default function Sensors() {
           </div>
         );
       })}
-      {data && Object.keys(data.sensors).length === 0 && <div className="alert info">이 기간에 선택한 센서 데이터가 없습니다.</div>}
+
+      <UploadPanel onUploaded={() => { sensors.reload(); pours.reload(); }} />
     </main>
   );
 }

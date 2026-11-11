@@ -1,14 +1,14 @@
-// [화면] 데이터 업로드 ( /upload )
+// [센서 데이터 화면의 일부] 센서 데이터 불러오기 (수행계획서: 센서데이터 › 센서 데이터 불러오기)
 // 기본: CSV를 끌어다 놓으면 새 타설 등록 창(NewPourModal)이 열려 업로드와 회차 등록을 한 번에 한다.
 // 기존 회차에 이어지는 데이터는 '타설 등록 없이 파일만 올리기'로 올린다.
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Pour, UploadResult } from "../api/client";
-import { ErrorBox, useAsync } from "../components/common";
-import NewPourModal, { NewPourResult } from "../components/NewPourModal";
+import { ErrorBox, useAsync } from "./common";
+import NewPourModal, { NewPourResult } from "./NewPourModal";
 import { fmtFull } from "../format";
 
-export default function Upload() {
+export default function UploadPanel({ onUploaded }: { onUploaded?: () => void }) {
   const history = useAsync(api.uploads, []);                       // 업로드 기록 표
   const [files, setFiles] = useState<File[]>([]);                  // '파일만 올리기'로 고른 파일
   const [over, setOver] = useState(false);                         // 파일을 끌고 드롭존 위에 있는지
@@ -30,7 +30,7 @@ export default function Upload() {
     setBusy(true); setErr(null); setResults(null); setCreated(null);
     try {
       setResults(await api.upload(files));
-      setFiles([]); history.reload();
+      setFiles([]); history.reload(); onUploaded?.();
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   };
@@ -43,14 +43,14 @@ export default function Upload() {
     setRegistering(false);
     setCreated(pour);
     setResults(uploads.length > 0 ? uploads : null);
-    setFiles([]); history.reload();
+    setFiles([]); history.reload(); onUploaded?.();
   };
 
   return (
-    <main className="page">
-      <div className="page-head">
+    <section className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="card-head" style={{ marginBottom: 0 }}>
         <div>
-          <h1>데이터 업로드</h1>
+          <h2>센서 데이터 불러오기</h2>
           <div className="muted small">
             측압·수분 CSV를 올리면서 새 타설을 함께 등록합니다. 이미 들어간 행은 자동으로 건너뜁니다.
           </div>
@@ -80,7 +80,7 @@ export default function Upload() {
         <input ref={input} type="file" accept=".csv" multiple hidden onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
       </div>
       {files.length > 0 && (
-        <div className="card">
+        <div>
           <div className="card-head">
             <h3>선택한 파일 {files.length}개</h3>
             <div className="actions">
@@ -94,7 +94,7 @@ export default function Upload() {
       )}
       <ErrorBox error={err} />
       {results && (
-        <div className="card table-wrap">
+        <div className="table-wrap">
           <h3 style={{ marginBottom: 8 }}>업로드 결과</h3>
           <table>
             <thead><tr><th>파일</th><th>종류</th><th>새로 저장</th><th>전체 행</th><th>기간</th><th>센서</th></tr></thead>
@@ -106,8 +106,8 @@ export default function Upload() {
           </table>
         </div>
       )}
-      <div className="card table-wrap">
-        <h3 style={{ marginBottom: 8 }}>업로드 기록</h3>
+      <details className="table-wrap">
+        <summary className="small">업로드 기록</summary>
         <table>
           <thead><tr><th>시각</th><th>파일</th><th>종류</th><th>새로 저장 / 전체</th><th>데이터 기간</th></tr></thead>
           <tbody>{history.data?.map((u) => (
@@ -116,8 +116,8 @@ export default function Upload() {
               <td>{fmtFull(u.period_start)} ~ {fmtFull(u.period_end)}</td></tr>
           ))}</tbody>
         </table>
-      </div>
+      </details>
       {registering && <NewPourModal initialFiles={pending} onClose={() => setRegistering(false)} onDone={registered} />}
-    </main>
+    </section>
   );
 }

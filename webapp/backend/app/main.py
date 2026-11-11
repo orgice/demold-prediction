@@ -11,6 +11,7 @@ uvicorn이 이 파일의 `app`을 실행한다 (backend/Dockerfile 참고).
 서버를 띄운 뒤 http://localhost:8000/docs 에서 모든 API를 직접 눌러 볼 수 있다.
 """
 from fastapi import FastAPI
+from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, engine
@@ -29,6 +30,9 @@ app.include_router(agent.router)
 def create_tables():
     """서버가 켜질 때 DB에 테이블이 없으면 만든다 (이미 있으면 그대로 둔다)."""
     Base.metadata.create_all(engine)
+    # 기존 DB에 나중에 추가된 컬럼 (create_all은 있는 테이블에 컬럼을 더하지 않는다)
+    with engine.begin() as c:
+        c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS member VARCHAR(10) NULL"))
 
 
 @app.get("/api/health")

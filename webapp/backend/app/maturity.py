@@ -56,6 +56,21 @@ def temperature(engine: Engine, macs: list[str], start: datetime, end: datetime)
     return t.interpolate(limit=36, limit_area="inside")  # 6시간 이내 공백만 보간
 
 
+def pour_temperature(engine: Engine, pour, start: datetime, end: datetime) -> pd.Series:
+    """회차의 온도. 사용자가 지정한 제외 구간(센서 이상·탈형 작업)은 빼고 앞뒤 값을 직선으로 잇는다."""
+    T = temperature(engine, pour.sensor_list, start, end)
+    for e in getattr(pour, "exclusions", []) or []:
+        T[(T.index >= e.start) & (T.index < e.end)] = np.nan
+    if T.empty:
+        return T
+    filled = T.interpolate(limit_area="inside")
+    # 제외 구간만 잇고, 원래 비어 있던 긴 공백(센서 꺼짐)은 그대로 둔다
+    for e in getattr(pour, "exclusions", []) or []:
+        m = (T.index >= e.start) & (T.index < e.end)
+        T[m] = filled[m]
+    return T
+
+
 def maturity(T: pd.Series) -> pd.Series:
     """적산온도: 10분마다 (온도 − 0℃)를 더해 간다. 0℃ 이하와 빈 값은 0으로. 단위 ℃·일."""
     return ((T - DATUM_TEMP).clip(lower=0).fillna(0) * STEP / timedelta(days=1)).cumsum()
@@ -112,7 +127,7 @@ def pour_data(engine: Engine, pour) -> PourData | None:
     if pour.start is None:
         return None
     start = pour.start
-    T = temperature(engine, pour.sensor_list, start, start + HORIZON + timedelta(days=2))
+    T = pour_temperature(engine, pour, start, start + HORIZON + timedelta(days=2))
     T = T[T.index >= start]
     if T.dropna().empty:
         return None
@@ -140,7 +155,9 @@ def clear_cache():
 
 def train(engine: Engine, pours: list, exclude_id: int | None):
     """exclude_id를 뺀 회차로 곡선을 맞추고, 같은 회차들로 불확실성(σ)을 추정."""
-    key = (exclude_id, tuple(sorted((p.id, p.start, len(p.tests)) for p in pours)))
+    key = (exclude_id, tuple(sorted((p.id, p.start, len(p.tests), p.sensors,
+                                     tuple((e.start, e.end) for e in getattr(p, "exclusions", []) or []))
+                                    for p in pours)))
     if key in _cache:
         return _cache[key]
     data = [d for p in pours if p.id != exclude_id
@@ -243,7 +260,7 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
     end = start + HORIZON
 
     # 2) 온도: 타설 시작부터 관측값, 기준 시각 이후는 가정한 미래 온도
-    T_all = temperature(engine, pour.sensor_list, start, end + STEP)
+    T_all = pour_temperature(engine, pour, start, end + STEP)
     T_all = T_all[T_all.index >= start]
     if T_all.dropna().empty:
         raise PredictionError("타설 이후 온도 데이터가 없습니다. 센서 목록을 확인하세요.")

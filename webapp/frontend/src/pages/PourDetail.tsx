@@ -1,16 +1,18 @@
-// [화면] 회차 상세 ( /pours/3 ) — 현재 공사 화면도 이것을 그대로 쓴다
+// [화면] 회차 상세 ( /pours/3 ) — 화면설계서 9~12쪽
 // 위쪽: 회차 이름·타설 시작·센서. 아래: 탭 4개
 //   강도 예측       PredictionTab  (예측 강도, 해체 가능 시각, 그래프)
 //   타설 시점 확인  PourTimeTab    (타설일 측압 그래프, 실제 타설 시각 입력)
 //   공시체 결과     TestsTab       (압축강도 시험 결과 입력)
-//   설정            SettingsTab    (이름·현장·설계강도·메모, 회차 삭제)
+//   설정            SettingsTab    (기본 정보, 연결 센서, CSV 후속 데이터, 제외 구간, 회차 삭제) → PourSettings.tsx
 // 지금 탭은 주소 뒤 ?tab=... 에 기록돼 새로고침해도 유지된다.
 import { useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, Pour, Prediction, StrengthTest, StrengthTestIn } from "../api/client";
+import { useParams, useSearchParams } from "react-router-dom";
+import { api, MEMBER_LABEL, Pour, StrengthTest, StrengthTestIn } from "../api/client";
 import { Chart, sensorColor, useChartTheme } from "../components/Chart";
 import { ErrorBox, Loading, MilestoneRow, useAsync } from "../components/common";
-import { fmtAge, fmtDateTime, fmtFull, fromInput, hoursBetween, toInput } from "../format";
+import { StrengthChart, TempChart, testPoints } from "../components/StrengthChart";
+import { fmtFull, fromInput, toInput } from "../format";
+import SettingsTab from "./PourSettings";
 
 type Tab = "predict" | "pourtime" | "tests" | "settings";
 // [탭 이름(주소용), 화면에 보이는 글자]
@@ -18,10 +20,8 @@ const TABS: [Tab, string][] = [
   ["predict", "강도 예측"], ["pourtime", "타설 시점 확인"], ["tests", "공시체 결과"], ["settings", "설정"],
 ];
 
-// pourId 를 주면 그 회차를 보여준다 (메인 화면에서 진행 중인 타설을 띄울 때). 없으면 주소의 :id
-export default function PourDetail({ pourId, live }: { pourId?: number; live?: boolean } = {}) {
-  const routeId = useParams().id;
-  const id = pourId ?? Number(routeId);
+export default function PourDetail() {
+  const id = Number(useParams().id);
   const pour = useAsync(() => api.pour(id), [id]);
   const [params, setParams] = useSearchParams();
   const tab = (TABS.find(([k]) => k === params.get("tab"))?.[0] ?? "predict") as Tab;
@@ -37,9 +37,9 @@ export default function PourDetail({ pourId, live }: { pourId?: number; live?: b
     <main className="page">
       <div className="page-head">
         <div>
-          <h1>{p.name} {live && <span className="badge good" style={{ verticalAlign: "middle" }}>공사 진행 중</span>}</h1>
+          <h1>{p.name}{p.member && <span className="badge neutral" style={{ verticalAlign: "middle", marginLeft: 8 }}>{MEMBER_LABEL[p.member]}</span>}</h1>
           <div className="muted small">
-            {p.site ?? ""} · 타설 시작 {fmtFull(p.pour_start ?? p.detected_start)}{" "}
+            {p.site ? `${p.site} · ` : ""}타설 시작 {fmtFull(p.pour_start ?? p.detected_start)}{" "}
             {p.pour_start ? <span className="badge good">확정</span> : <span className="badge warn">자동 추정 — 확인 필요</span>}
             {" "}· 센서 {p.sensors.join(", ")}
           </div>
@@ -88,7 +88,7 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
           <div className="value">{pred.model.calibrated ? `×${pred.model.calibration_scale.toFixed(2)}` : "없음"}</div>
           <div className="sub">
             {pred.model.calibrated
-              ? `시험 ${testMeans(pred, true).length}회(공시체 ${pred.model.calibration_tests}개)로 회차 보정`
+              ? `현장양생 시험 ${testPoints(pred, true).length}회로 이 회차 보정`
               : "공시체 결과 입력 시 정확도 향상"}
           </div>
         </div>
@@ -96,8 +96,9 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
 
       <div className="grid split">
         <div className="card">
-          <div className="card-head"><h3>압축강도 예측 곡선</h3><span className="tiny">음영 = 90% 범위</span></div>
+          <div className="card-head"><h3>최초 예측과 실측 기반 추정</h3><span className="tiny">옅은 주황 음영 = 90% 범위</span></div>
           <StrengthChart pred={pred} design={pour.design_strength} />
+          <div className="tiny">점선은 최초 예측(타설 후 24시간 시점), 초록선은 실측 온도로 계산한 값, 주황선은 현재 시점에서 이어지는 수정 예측입니다.</div>
         </div>
         <div className="card">
           <h3 style={{ marginBottom: 12 }}>해체 가능 예상 시각</h3>
@@ -112,7 +113,7 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
       </div>
 
       <div className="card">
-        <div className="card-head"><h3>콘크리트 내부온도</h3><span className="tiny">점선 = 가정한 미래 온도</span></div>
+        <div className="card-head"><h3>콘크리트 내부온도</h3><span className="tiny">점선 = 최근 24시간 패턴을 반복한다는 가정</span></div>
         <TempChart pred={pred} />
       </div>
 
@@ -129,118 +130,6 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
       </details>
     </>
   );
-}
-
-/**
- * 압축강도 예측 곡선. x축 = 타설 후 일수, y축 = MPa
- * 실선 = 관측 온도로 계산, 점선 = 가정 온도로 계산, 음영 = 90% 범위,
- * 회색 긴 점선 = 최초 예상(타설 후 24시간 시점의 예측), 주황 점 = 공시체, 가로 점선 = 5·14 MPa·설계강도
- */
-function StrengthChart({ pred, design }: { pred: Prediction; design: number | null }) {
-  const th = useChartTheme();
-  const day = (h: number) => +(h / 24).toFixed(3);
-  const obs = pred.series.filter((s) => s.observed);
-  const fut = pred.series.filter((s, i, a) => !s.observed || (a[i + 1] && !a[i + 1].observed));
-  const lines = [
-    { yAxis: 5, name: "벽체 5 MPa" }, { yAxis: 14, name: "슬래브 14 MPa" },
-    ...(design ? [{ yAxis: design, name: `설계 ${design} MPa` }] : []),
-  ];
-  const option = {
-    tooltip: {
-      trigger: "axis",
-      // 커서 위치에 가장 가까운 시점의 강도·범위·적산온도·내부온도를 함께 보여 준다
-      formatter: (params: { seriesName: string; value: number[]; marker: string }[]) => {
-        const x = params[0]?.value[0];
-        if (x == null) return "";
-        const s = pred.series.reduce((a, b) => (Math.abs(day(b.age_h) - x) < Math.abs(day(a.age_h) - x) ? b : a));
-        const base = pred.baseline?.series.find((b) => b.age_h === s.age_h);
-        const f1 = (v: number | null) => (v == null ? "—" : v.toFixed(1));
-        const rows = [
-          `<b>${fmtDateTime(s.t)}</b> · 타설 후 ${fmtAge(s.age_h)}`,
-          `${params.find((p) => p.seriesName.startsWith("예측"))?.marker ?? ""}예측 강도 <b>${f1(s.strength)} MPa</b>`,
-          `90% 범위 ${f1(s.lower)}–${f1(s.upper)} MPa`,
-          ...(base ? [`${params.find((p) => p.seriesName === "최초 예상")?.marker ?? ""}최초 예상 ${f1(base.strength)} MPa`] : []),
-          `적산온도 <b>${f1(s.maturity)} ℃·일</b>`,
-          `내부온도 ${s.temp == null ? "—" : `${f1(s.temp)} ℃`} (${s.observed ? "관측" : "가정"})`,
-          ...params.filter((p) => p.seriesName === "공시체 시험 결과")
-            .map((p) => `${p.marker}공시체 평균 ${f1(p.value[1])} MPa`),
-        ];
-        return rows.join("<br/>");
-      },
-    },
-    legend: { data: ["예측 (관측 온도)", "예측 (가정 온도)", ...(pred.baseline ? ["최초 예상"] : []), "공시체 시험 결과"] },
-    xAxis: { type: "value", name: "타설 후 (일)", nameLocation: "middle", nameGap: 28, min: 0, max: 28 },
-    yAxis: { type: "value", name: "MPa", min: 0 },
-    dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
-    series: [
-      { // 90% 범위: 상한을 따라갔다가 하한을 거꾸로 돌아오는 다각형
-        name: "범위", type: "custom", silent: true, tooltip: { show: false }, data: [0],
-        renderItem: (_: unknown, api: { coord: (p: number[]) => number[] }) => ({
-          type: "polygon",
-          shape: { points: [
-            ...pred.series.map((s) => api.coord([day(s.age_h), s.upper])),
-            ...[...pred.series].reverse().map((s) => api.coord([day(s.age_h), s.lower])),
-          ] },
-          style: { fill: th.accent, opacity: 0.15 },
-        }),
-        clip: true, z: 0 },
-      { name: "예측 (관측 온도)", type: "line", data: obs.map((s) => [day(s.age_h), s.strength]), symbol: "none",
-        lineStyle: { width: 2, color: th.accent }, itemStyle: { color: th.accent },
-        markLine: {
-          symbol: "none", silent: true, label: { formatter: "{b}", position: "insideEndTop", color: th.text },
-          lineStyle: { color: th.text, type: "dashed", width: 1 },
-          data: [...lines, { xAxis: day(hoursBetween(pred.start, pred.as_of)), name: nowLabel(pred.as_of) }],
-        } },
-      { name: "예측 (가정 온도)", type: "line", data: fut.map((s) => [day(s.age_h), s.strength]), symbol: "none",
-        lineStyle: { width: 2, type: "dashed", color: th.accent }, itemStyle: { color: th.accent } },
-      ...(pred.baseline ? [{ // 타설 후 24시간 시점에 했을 예측 (계획 대비 비교용)
-        name: "최초 예상", type: "line", symbol: "none", z: 1,
-        data: pred.baseline.series.map((b) => [day(b.age_h), b.strength]),
-        lineStyle: { width: 2, type: [8, 5], color: th.muted }, itemStyle: { color: th.muted },
-      }] : []),
-      { name: "공시체 시험 결과", type: "scatter", symbolSize: 10,
-        data: testMeans(pred, true).map((t) => [day(t.age_h), t.fc]),
-        itemStyle: { color: "#eb6834", borderColor: th.surface, borderWidth: 1.5 } },
-    ],
-  };
-  return <Chart option={option} height={380} />;
-}
-
-// 마지막 센서 데이터가 1시간 이내면 "현재 시각", 늦어지면 그 시각을 적어 데이터가 끊긴 걸 보이게 한다
-function nowLabel(asOf: string) {
-  const lagMs = Date.now() - new Date(asOf).getTime();
-  return lagMs <= 3600_000 ? "현재 시각" : `마지막 데이터 ${fmtDateTime(asOf)}`;
-}
-
-// 한 번의 시험(같은 test_id)에서 깬 공시체 2~3개를 평균 내 점 하나로 그린다
-function testMeans(pred: Prediction, used: boolean) {
-  const groups = new Map<number, { age_h: number; sum: number; n: number }>();
-  for (const t of pred.tests) {
-    if (t.used_for_calibration !== used) continue;
-    const g = groups.get(t.test_id) ?? { age_h: t.age_h, sum: 0, n: 0 };
-    g.sum += t.fc; g.n += 1;
-    groups.set(t.test_id, g);
-  }
-  return [...groups.values()].map((g) => ({ age_h: g.age_h, fc: +(g.sum / g.n).toFixed(2) }));
-}
-
-/** 콘크리트 내부온도 그래프: 실선 = 관측, 점선 = 가정한 미래 온도(직전 24시간 반복) */
-function TempChart({ pred }: { pred: Prediction }) {
-  const th = useChartTheme();
-  const day = (h: number) => +(h / 24).toFixed(3);
-  const option = {
-    tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ℃`) },
-    legend: { data: ["관측", "가정"] },
-    xAxis: { type: "value", name: "타설 후 (일)", nameLocation: "middle", nameGap: 28, min: 0, max: 28 },
-    yAxis: { type: "value", name: "℃", scale: true },
-    series: [
-      { name: "관측", type: "line", symbol: "none", lineStyle: { width: 1.5, color: th.accent }, itemStyle: { color: th.accent },
-        data: pred.series.filter((s) => s.observed).map((s) => [day(s.age_h), s.temp]) },
-      { name: "가정", type: "line", symbol: "none", lineStyle: { width: 1.5, type: "dashed", color: th.text }, itemStyle: { color: th.text },
-        data: pred.series.filter((s) => !s.observed).map((s) => [day(s.age_h), s.temp]) },
-    ],
-  };
-  return <Chart option={option} height={220} />;
 }
 
 // ---------------- 타설 시점 확인 ----------------
@@ -371,8 +260,8 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
       <div className="card">
         <h3 style={{ marginBottom: 10 }}>{editing ? "공시체 결과 수정" : "공시체 결과 입력"}</h3>
         <div className="small muted" style={{ marginBottom: 10 }}>
-          현장양생 공시체 결과를 넣으면 이 회차 예측이 보정됩니다 (1일 공시체 하나로도 14 MPa 시각 오차가 크게 줄어듭니다).
-          수중양생은 표시만 하고 보정에는 쓰지 않습니다.
+          시험기관 보고서의 평균 압축강도(MPa) 하나를 입력합니다. 재령 1.6일 이하 현장양생 결과는 이 회차 예측 보정에 쓰이고
+          (1일 공시체 하나로도 14 MPa 도달 시각 오차가 크게 줄어듭니다), 수중양생 결과는 기록만 하고 보정에는 쓰지 않습니다.
         </div>
         <div className="form-row">
           <label className="field">시험 일시<input type="datetime-local" value={toInput(form.test_datetime)}
@@ -415,47 +304,3 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   );
 }
 
-// ---------------- 설정 ----------------
-/** 설정 탭: 이름·현장·설계기준강도·메모 수정, 회차 삭제 (센서 데이터는 남음) */
-function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
-  const nav = useNavigate();
-  const [f, setF] = useState({
-    name: pour.name, site: pour.site ?? "", design: pour.design_strength?.toString() ?? "",
-    note: pour.note ?? "",
-  });
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  const save = async () => {
-    setErr(null);
-    try {
-      await api.updatePour(pour.id, {
-        name: f.name, site: f.site || null, note: f.note || null,
-        design_strength: f.design ? Number(f.design) : null,
-      });
-      setMsg("저장했습니다."); onSaved();
-    } catch (e) { setErr((e as Error).message); }
-  };
-  const remove = async () => {
-    if (!confirm(`${pour.name}과 공시체 결과를 모두 삭제할까요? (센서 데이터는 남습니다)`)) return;
-    await api.deletePour(pour.id); nav("/pours");
-  };
-
-  return (
-    <div className="card">
-      <div className="form-row">
-        <label className="field">이름<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
-        <label className="field">현장<input value={f.site} onChange={(e) => setF({ ...f, site: e.target.value })} /></label>
-        <label className="field">설계기준강도 (MPa)<input type="number" value={f.design} placeholder="배합표 확인 후 입력"
-          onChange={(e) => setF({ ...f, design: e.target.value })} /></label>
-      </div>
-      <label className="field" style={{ marginTop: 12 }}>메모<textarea rows={3} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></label>
-      <div className="actions" style={{ marginTop: 12, justifyContent: "space-between" }}>
-        <button className="btn danger" onClick={remove}>회차 삭제</button>
-        <button className="btn primary" onClick={save}>저장</button>
-      </div>
-      {msg && <div className="alert info" style={{ marginTop: 10 }}>{msg}</div>}
-      <ErrorBox error={err} />
-    </div>
-  );
-}
