@@ -28,7 +28,8 @@ LLM 에이전트(도구 호출 + 해체 가이드라인 RAG)로 해체 시점을
 
 - OpenAI 호환 LLM 서버(tool calling 지원)에 연결해, 모델이 예측·회차 목록·온도·가이드라인 검색 도구를 골라 부르고 결과를 설명합니다.
 - 강도·시각 숫자는 LLM 이 만들지 않고 모두 적산온도 모델이 계산합니다.
-- 가이드라인 검색은 BM25 키워드 검색(한국어 bigram)으로 직접 구현했습니다. 인덱스는 `webapp/backend/scripts/build_guideline_index.py` 로 PDF 에서 만듭니다.
+- 가이드라인 검색은 하이브리드 검색입니다: BM25 키워드 검색(한국어 bigram, 직접 구현) + 팀 서버 임베딩(qwen-embedding) 의미 검색을 순위 합치기(RRF)로 묶습니다. 임베딩 서버가 안 되면 키워드 검색만 씁니다.
+- 색인은 저장소에 든 팀 요약본(`webapp/backend/knowledge/`)을 기본으로 씁니다. 국토교통부 원문 가이드라인은 재배포 금지라 저장소에 없으며, 원문 PDF로 색인을 만들면(`webapp/backend/scripts/build_guideline_index.py`) 그것을 먼저 씁니다.
 
 ## 한계
 

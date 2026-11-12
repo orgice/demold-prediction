@@ -122,8 +122,10 @@ def tool_search_guideline(s: Session, query: str, k: int = 4) -> dict:
         return {"results": [], "note": "가이드라인에서 관련 내용을 찾지 못했습니다."}
     return {"source": hits[0]["source"], "results": [{
         "pages": "p." + "-".join(dict.fromkeys([h["pages"][0], h["pages"][-1]])) if h["pages"] else "",
-        "section": h["section"], "score": h["score"], "text": h["text"],
-    } for h in hits], "note": "score 는 키워드 일치 점수(높을수록 관련). 내용이 질문과 맞지 않으면 근거로 쓰지 말 것."}
+        "section": h["section"], "similarity": h["similarity"], "text": h["text"],
+    } for h in hits], "search": hits[0]["method"],
+        "note": "키워드와 의미 검색을 합쳐 관련 높은 순으로 정렬했다. similarity 는 의미 유사도(0~1). "
+                "순위가 높아도 내용이 질문과 맞지 않으면 근거로 쓰지 말 것."}
 
 
 # LLM에게 보내는 '도구 설명서'. LLM은 함수 본문을 못 보고 이 설명만 보고 고른다.
