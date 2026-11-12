@@ -3,7 +3,8 @@ import ReactECharts from "echarts-for-react";
 import { useEffect, useState } from "react";
 
 // 센서 색은 항상 같은 MAC에 같은 색 (순위가 아니라 대상에 따라)
-const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+// DESIGN.md 7장 (Bezier 원색 400 단계)
+const PALETTE = ["#5E56F0", "#F4800B", "#0FB3A3", "#CB48AD", "#329BE7", "#A0A540", "#915CE0", "#E94E58"];
 // 특정 센서에 색을 고정하고 싶으면 여기에 적는다. 예: "9288": "#2a78d6"
 const FIXED: Record<string, string> = {
 
@@ -29,12 +30,12 @@ function useDark() {
 export function useChartTheme() {
   const dark = useDark();
   return {
-    text: dark ? "#c3c2b7" : "#52514e",
-    strong: dark ? "#f0efec" : "#0b0b0b",
-    grid: dark ? "#33332f" : "#e6e5e1",
-    surface: dark ? "#1a1a19" : "#fcfcfb",
-    accent: dark ? "#3987e5" : "#2a78d6",
-    muted: dark ? "#8b93a7" : "#6b7280", // 비교용 기준선 (최초 예상)
+    text: dark ? "#A8A8A9" : "#666666",
+    strong: dark ? "#D4D4D4" : "#262626",
+    grid: dark ? "#464748" : "#EFEFF0",
+    surface: dark ? "#313234" : "#FFFFFF",
+    accent: dark ? "#6687FF" : "#5E56F0",
+    muted: dark ? "#A8A8A9" : "#666666", // 비교용 기준선 (최초 예상)
   };
 }
 
@@ -55,7 +56,10 @@ export function Chart({ option, height = 320 }: { option: Record<string, unknown
     textStyle: { fontFamily: "\"Pretendard Variable\", Pretendard, \"Apple SD Gothic Neo\", \"Malgun Gothic\", sans-serif", color: th.text },
     grid: { left: 52, right: 20, top: 36, bottom: 56 },
     ...option,
-    tooltip: { trigger: "axis", backgroundColor: th.surface, borderColor: th.grid, textStyle: { color: th.strong },
+    // 툴팁: 흰 면 · 모서리 8px · ev-3 그림자 · 테두리 없음
+    tooltip: { trigger: "axis", backgroundColor: th.surface, borderWidth: 0, padding: [8, 12],
+      extraCssText: "border-radius:8px;box-shadow:0 0 2px rgba(0,0,0,.05),0 4px 12px rgba(0,0,0,.15);",
+      textStyle: { color: th.strong, fontSize: 13 },
       ...(option.tooltip as object) },
     legend: { textStyle: { color: th.text }, top: 0, type: "scroll", inactiveColor: th.grid,
       ...(option.legend as object) },

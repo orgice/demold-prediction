@@ -19,6 +19,8 @@ const MAX_PREV = 4;          // 이전 회차는 4개까지 (진행 회차 포�
 type View = "overlay" | "separate";
 
 const startOf = (p: Pour) => p.pour_start ?? p.detected_start;
+/** 펼침 꺾쇠 (aria-expanded="true"인 버튼 안에서 90° 회전) */
+const CHEVRON = <svg className="chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 4l4 4-4 4" /></svg>;
 const nowIso = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
 
 /** 진행 중: 타설 시작 후 28일 이내 */
@@ -153,6 +155,7 @@ function DashHead({ demo, bell, count, onBell, onExitDemo }: {
   demo: boolean; bell: boolean; count: number; onBell: () => void; onExitDemo?: () => void;
 }) {
   return (
+    <>
     <div className="page-head">
       <div className="row nowrap">
         <h1>시험 강도 대시보드</h1>
@@ -164,13 +167,14 @@ function DashHead({ demo, bell, count, onBell, onExitDemo }: {
           {count > 0 && <span className="dot-count">{count}</span>}
         </button>
       </div>
-      {demo && (
-        <div className="small row">
-          <span className="badge warn">예시 데이터</span>
-          <button className="btn sm" onClick={onExitDemo}>실제 데이터로 돌아가기</button>
-        </div>
-      )}
     </div>
+    {demo && (
+      <div className="demo-band" role="status">
+        <span><b>예시 데이터입니다.</b> 실제 측정값이 아닌 화면 확인용 데이터를 보여 주고 있어요.</span>
+        <button className="btn sm" onClick={onExitDemo}>실제 데이터로 돌아가기</button>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -229,7 +233,7 @@ function PrevPicker({ previous, picked, onChange }: { previous: Pour[]; picked: 
   return (
     <div className="picker">
       <button className="btn sm" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {open ? "▾" : "▸"} 이전 회차 선택{picked.length ? ` · ${picked.length}개` : ""}
+        {CHEVRON} 이전 회차 선택{picked.length ? ` · ${picked.length}개` : ""}
       </button>
       {open && (
         <div className="picker-pop">
@@ -261,7 +265,7 @@ type Item = { pour: Pour; state: PredState };
 
 function PourName({ pour, demo, color }: { pour: Pour; demo: boolean; color?: string }) {
   return (
-    <span className="row nowrap">
+    <span className="pour-name">
       {color && <span className="dot" style={{ background: color }} aria-hidden="true" />}
       {demo ? <b>{title(pour)}</b> : <Link to={`/pours/${pour.id}`} className="pour-link">{title(pour)}</Link>}
     </span>
@@ -319,7 +323,7 @@ function SummaryHead({ item, color, demo, open, onToggle, status }: {
     <div className="sum-head">
       <PourName pour={item.pour} demo={demo} color={color} />
       <button className="tri" aria-expanded={open} aria-label={`${item.pour.name} 기준 강도 도달 예상 시점 ${open ? "접기" : "펼치기"}`}
-        onClick={onToggle} disabled={!item.state.data}>{open ? "▾" : "▸"}</button>
+        onClick={onToggle} disabled={!item.state.data}>{CHEVRON}</button>
       {status && <span className="tiny">{status}</span>}
     </div>
   );
@@ -480,7 +484,7 @@ function mailto(a: AlertItem) {
 function AlertPanel({ alerts }: { alerts: Alerts }) {
   return (
     <section className="card stack" aria-label="강도 알림">
-      <h3>강도 알림<Info align="right">메일 작성은 기본 메일 앱에 초안만 엽니다. 수신자 확인과 발송은 직접 합니다.</Info></h3>
+      <h3>강도 알림<Info align="right">메일 초안 열기는 기본 메일 앱에 초안만 엽니다. 수신자 확인과 발송은 직접 합니다.</Info></h3>
       {alerts.selected === 0 && <div className="muted small">선택한 회차가 없습니다.</div>}
       {alerts.failed.length > 0 && (
         <div className="alert error small">
@@ -490,12 +494,12 @@ function AlertPanel({ alerts }: { alerts: Alerts }) {
       {alerts.selected > 0 && alerts.list.length === 0 && alerts.failed.length === 0 && (
         <div className="muted small">선택한 회차 중 주의할 회차가 없습니다.</div>
       )}
-      <div className="stack tight">
+      <div className="alert-list">
         {alerts.list.map((a, i) => (
-          <div key={i} className="alert warn stack tight">
-            <div className="strong">{a.kind === "soon" ? "⏰ " : "⚠ "}{a.title}</div>
+          <div key={i} className="alert warn">
+            <div className="alert-title"><span className="ico" aria-hidden="true">{a.kind === "soon" ? "⏰" : "⚠"}</span>{a.title}</div>
             <div className="small">{a.text}</div>
-            <a className="btn sm self-start" href={mailto(a)}>메일 작성</a>
+            <a className="btn sm" href={mailto(a)}>메일 초안 열기</a>
           </div>
         ))}
       </div>
