@@ -130,7 +130,7 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
         <div className="file-list">
           {files.map((f, i) => (
             <div key={i} className="file-row">
-              {f.peek && <span className={`badge ${f.peek.kind === "pressure" ? "info" : "good"}`}>{f.peek.kind === "pressure" ? "측압" : "수분"}</span>}
+              {f.peek && <span className="badge neutral">{f.peek.kind === "pressure" ? "측압" : "수분"}</span>}
               <div className="grow">
                 <div className="small"><b>{f.file.name}</b> <span className="tiny">{(f.file.size / 1e6).toFixed(1)} MB</span></div>
                 <div className="tiny">

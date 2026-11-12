@@ -40,7 +40,7 @@ export default function PourDetail() {
           <h1>{p.name}{p.member && <span className="badge neutral badge-gap">{MEMBER_LABEL[p.member]}</span>}</h1>
           <div className="muted small">
             {p.site ? `${p.site} · ` : ""}타설 시작 {fmtFull(p.pour_start ?? p.detected_start)}{" "}
-            {p.pour_start ? <span className="badge good">확정</span> : <span className="badge warn">자동 추정 — 확인 필요</span>}
+            {p.pour_start ? <span className="badge neutral">확정</span> : <span className="badge warn">자동 추정 — 확인 필요</span>}
             {" "}· 센서 {p.sensors.join(", ")}
           </div>
         </div>
@@ -71,15 +71,15 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
       <div className="grid kpis">
         <div className="kpi">
           <div className="label">현재 예측 강도</div>
-          <div className="value">{pred.current_strength.toFixed(1)} MPa</div>
+          <div className="value">{pred.current_strength.toFixed(1)}<span className="unit">MPa</span></div>
           <div className="sub">90% 범위 {pred.current_range[0].toFixed(1)}–{pred.current_range[1].toFixed(1)}</div>
         </div>
         <div className="kpi">
           <div className="label">28일 예측 강도</div>
-          <div className="value">{pred.strength_28d.toFixed(1)} MPa</div>
+          <div className="value">{pred.strength_28d.toFixed(1)}<span className="unit">MPa</span></div>
           <div className="sub">
             {pred.design_ratio_28d != null
-              ? `설계강도 대비 ${(pred.design_ratio_28d * 100).toFixed(0)}%${pred.design_ratio_28d < 1 ? " — 양생 관리 필요" : ""}`
+              ? <>설계강도 대비 {(pred.design_ratio_28d * 100).toFixed(0)}%{pred.design_ratio_28d < 1 && <span className="text-warn"> · 양생 관리 필요</span>}</>
               : "설계강도 미입력 (설정 탭)"}
           </div>
         </div>

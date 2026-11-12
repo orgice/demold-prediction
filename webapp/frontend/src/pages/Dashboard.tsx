@@ -274,13 +274,15 @@ function Kpis({ pred, compact = false }: { pred: Prediction; compact?: boolean }
     <div className={`grid kpis ${compact ? "kpis-2" : ""}`}>
       <div className="kpi">
         <div className="label">{compact ? `현재 ${fmtAge(hoursBetween(pred.start, pred.as_of))}` : "현재 예측 강도"}</div>
-        <div className="value">{pred.current_strength.toFixed(1)} MPa</div>
+        <div className="value">{pred.current_strength.toFixed(1)}<span className="unit">MPa</span></div>
         {!compact && <div className="sub">90% 범위 {pred.current_range[0].toFixed(1)}–{pred.current_range[1].toFixed(1)}</div>}
       </div>
       <div className="kpi">
         <div className="label">28일 예측{compact ? "" : " 강도"}</div>
-        <div className="value">{pred.strength_28d.toFixed(1)} MPa</div>
-        {!compact && <div className="sub">{ratio != null ? `설계강도 대비 ${(ratio * 100).toFixed(0)}%${ratio < 1 ? " — 양생 관리 필요" : ""}` : "설계강도 미입력"}</div>}
+        <div className="value">{pred.strength_28d.toFixed(1)}<span className="unit">MPa</span></div>
+        {!compact && <div className="sub">{ratio != null
+          ? <>설계강도 대비 {(ratio * 100).toFixed(0)}%{ratio < 1 && <span className="text-warn"> · 양생 관리 필요</span>}</>
+          : "설계강도 미입력"}</div>}
       </div>
       {!compact && (
         <div className="kpi">

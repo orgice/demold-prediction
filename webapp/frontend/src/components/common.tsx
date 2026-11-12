@@ -62,7 +62,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
 export function MilestoneBadge({ m }: { m: Milestone }) {
   if (m.reached_at_as_of) return <span className="badge good">✓ 도달</span>;
   if (!m.expected) return <span className="badge bad">28일 내 미도달 예상</span>;
-  return <span className="badge warn">⏳ 예정</span>;
+  return <span className="badge neutral">예정</span>;
 }
 
 /** 최초 예상 대비 늦어짐(+)/빨라짐(−) */
@@ -88,7 +88,7 @@ export function MilestoneRow({ m, baseAgeH }: { m: Milestone; baseAgeH?: number 
       </div>
       <div className="when">
         <MilestoneBadge m={m} />
-        <div>{fmtDateTime(m.expected)}</div>
+        <div className="when-time">{fmtDateTime(m.expected)}</div>
         <div className="tiny">타설 후 {fmtAge(m.expected_age_h)}</div>
         {delay && <div className="tiny">{delay}</div>}
       </div>

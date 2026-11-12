@@ -32,13 +32,13 @@ export default function PourList() {
                 <h2>{pour.name}{pour.member && <span className="badge neutral badge-gap">{MEMBER_LABEL[pour.member]}</span>}</h2>
                 <div className="tiny">
                   타설 {fmtFull(pour.pour_start ?? pour.detected_start)}{" "}
-                  {pour.pour_start ? <span className="badge good">확정</span> : <span className="badge warn">자동 추정</span>}
+                  {pour.pour_start ? <span className="badge neutral">확정</span> : <span className="badge warn">자동 추정</span>}
                 </div>
               </div>
               {current_strength != null && (
                 <div className="right">
                   <div className="tiny">현재 예측 강도</div>
-                  <div className="big-num">{current_strength.toFixed(1)} MPa</div>
+                  <div className="big-num">{current_strength.toFixed(1)}<span className="unit">MPa</span></div>
                   <div className="tiny">기준 {fmtDateTime(as_of)}</div>
                 </div>
               )}
