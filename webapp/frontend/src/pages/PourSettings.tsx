@@ -8,7 +8,7 @@ import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, Member, MEMBER_LABEL, Pour, UploadResult } from "../api/client";
 import { ErrorBox, Loading, useAsync } from "../components/common";
-import { fmtDateTime, fmtFull, fromInput } from "../format";
+import { fmtDateTime, fmtFull, fmtSensorSpan, fromInput } from "../format";
 
 const REASONS = ["탈형 작업", "센서 이상", "거푸집 설치 충격", "기타"];
 
@@ -74,7 +74,7 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
             .map((s) => (
               <label key={s.mac} className={`chip ${macs.includes(s.mac) ? "on" : ""}`}>
                 <input type="checkbox" checked={macs.includes(s.mac)} onChange={() => toggle(s.mac)} style={{ margin: 0 }} />
-                {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압·내부온도"} · {fmtDateTime(s.first).split(" ")[0]}~{fmtDateTime(s.last).split(" ")[0]}</span>
+                {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압·내부온도"} · {fmtSensorSpan(s.first, s.last, s.buckets)}</span>
               </label>
             ))}
         </div>
