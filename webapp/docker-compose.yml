@@ -30,6 +30,7 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-qwen}
+      EMBED_MODEL: ${EMBED_MODEL:-qwen-embedding}
     depends_on:
       db: {condition: service_healthy}
     ports: ["8000:8000"]
