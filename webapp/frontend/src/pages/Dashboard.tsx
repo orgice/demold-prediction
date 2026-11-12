@@ -1,12 +1,13 @@
 // [화면] 시험 강도 대시보드 ( / ) — 화면설계서 1~6쪽, 수행계획서 대시보드 기능
 //   ① 진행 중 회차 배너·선택   ② 이전 회차 선택 (검색·전체 선택·선택 해제·개별 선택, 최대 4개)
 //   ③ 겹쳐 보기 / 회차별 보기  ④ 회차 요약 (현재·28일·보정) + ▸ 기준 강도 도달 예상 시점
-//   ⑤ 종 아이콘 = 강도 알림 패널 (28일 예측 미달·도달 임박, 메일 초안)
+//   ⑤ 종 아이콘 = 강도 알림 패널 (예측 시작·변경, 도달 임박, 28일 미달 → 메일 초안. 숫자 = 아직 안 연 알림)
 // 진행 중 회차 = 타설 후 28일이 지나지 않은 회차. 협력사 DB 연동 후에는 실시간 수집 회차가 된다.
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, MEMBER_LABEL, Pour, Prediction } from "../api/client";
 import { ErrorBox, Info, Loading, MilestoneRow, useAsync } from "../components/common";
+import { AlertItem, alertsFor, KIND_LABEL, mailtoUrl, milestoneSnapshot, recipients } from "../components/alerts";
 import { demoData } from "../components/demo";
 import NewPourModal, { pourUrl } from "../components/NewPourModal";
 import {
@@ -112,9 +113,10 @@ export default function Dashboard() {
 
   return (
     <main className="page">
-      <DashHead demo={demo} bell={bell} count={alerts.list.length} onBell={() => setBell((b) => !b)}
+      <DashHead demo={demo} bell={bell} count={alerts.unsent} onBell={() => setBell((b) => !b)}
         onExitDemo={() => { setDemo(false); setPreds({}); setMainSel(null); setPrev([]); }} />
-      {bell && <AlertPanel alerts={alerts} />}
+      {bell && <AlertPanel alerts={alerts} demo={demo}
+        onSent={(p) => pours.setData((xs) => xs?.map((x) => (x.id === p.id ? p : x)) ?? xs)} />}
 
       {sorted.length === 0 ? (
         <div className="card empty">
@@ -438,53 +440,34 @@ function Separate({ items, colorOf, demo }: { items: Item[]; colorOf: (id: numbe
 }
 
 // ---------------- 강도 알림 ----------------
-interface AlertItem { pour: Pour; kind: "under" | "soon"; title: string; text: string }
-interface Alerts { list: AlertItem[]; failed: Pour[]; selected: number }
+// 알림 종류·조건·메일 초안 내용은 components/alerts.ts 에 있다
+interface Alerts { list: AlertItem[]; failed: Pour[]; selected: number; unsent: number }
 
-/** 알림 대상: 선택한 회차. 28일 예측이 기준보다 낮거나(FR-012), 진행 중 회차가 24시간 안에 기준에 닿을 때(FR-011) */
+/** 알림 대상: 선택한 회차. 아직 메일 초안을 열지 않은 알림을 위로 */
 function buildAlerts(items: Item[]): Alerts {
   const list: AlertItem[] = [];
   const failed: Pour[] = [];
   for (const { pour, state } of items) {
-    if (state.error) { failed.push(pour); continue; }
-    const pred = state.data;
-    if (!pred) continue;
-    // 부재 종류를 정했으면 그 기준만, 아니면 5·14 MPa 모두
-    const base = pour.member === "wall" ? [5] : pour.member === "slab" ? [14] : [5, 14];
-    const targets = [...base.map((v) => ({ v, name: `${v} MPa` })),
-      ...(pour.design_strength ? [{ v: pour.design_strength, name: `설계강도 ${pour.design_strength} MPa` }] : [])];
-    const under = targets.filter((t) => pred.strength_28d < t.v);
-    if (under.length) {
-      list.push({ pour, kind: "under", title: `${title(pour)} · 강도 도달 주의`,
-        text: `28일 예측 강도 ${pred.strength_28d.toFixed(1)} MPa가 ${under.map((u) => u.name).join(", ")} 기준보다 낮습니다.` });
-    }
-    // 도달 임박: 데이터가 지금 들어오고 있는 회차만
-    const live = Date.now() - new Date(pred.as_of).getTime() < 3 * 3600_000;
-    if (live) {
-      for (const m of pred.milestones) {
-        if (m.reached_at_as_of || !m.expected || !targets.some((t) => t.v === m.threshold)) continue;
-        const h = hoursBetween(pred.as_of, m.expected);
-        if (h >= 0 && h <= 24) {
-          list.push({ pour, kind: "soon", title: `${title(pour)} · 도달 임박`,
-            text: `${m.label} 도달 예상 ${fmtDateTime(m.expected)} (약 ${Math.max(1, Math.round(h))}시간 후), 보수적 ${fmtDateTime(m.conservative)}.` });
-        }
-      }
-    }
+    if (state.error) failed.push(pour);
+    else if (state.data) list.push(...alertsFor(pour, state.data));
   }
-  return { list, failed, selected: items.length };
+  list.sort((x, y) => Number(!!x.sentAt) - Number(!!y.sentAt));
+  return { list, failed, selected: items.length, unsent: list.filter((x) => !x.sentAt).length };
 }
 
-function mailto(a: AlertItem) {
-  const subject = `[FormCast] ${a.title}`;
-  const body = [`${a.pour.name}${a.pour.site ? ` (${a.pour.site})` : ""}`, "", a.text, "",
-    "※ 예측값은 참고 정보이며, 거푸집 해체 승인은 현장 책임자가 합니다."].join("\n");
-  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
+const ALERT_ICON: Record<AlertItem["kind"], string> = { new: "●", changed: "↻", soon: "⏰", under: "⚠" };
 
-function AlertPanel({ alerts }: { alerts: Alerts }) {
+function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; onSent: (p: Pour) => void }) {
+  // 초안을 열면 '보냄'으로 기록 → 같은 알림은 종 아이콘 숫자에서 빠지고, 다음 '예측 변경' 비교 기준이 된다
+  const record = (a: AlertItem) => {
+    if (demo) return;
+    api.recordNotice(a.pour.id, { key: a.key, milestones: milestoneSnapshot(a.pour, a.pred) }).then(onSent).catch(() => undefined);
+  };
   return (
     <section className="card stack" aria-label="강도 알림">
-      <h3>강도 알림<Info align="right">메일 초안 열기는 기본 메일 앱에 초안만 엽니다. 수신자 확인과 발송은 직접 합니다.</Info></h3>
+      <h3>강도 알림
+        <Info align="right">메일 초안 열기를 누르면 기본 메일 앱에 받는 사람·제목·본문이 채워진 초안이 열립니다. 발송은 내용을 확인한 뒤 직접 합니다. 받는 사람은 회차 설정에서 정합니다.</Info>
+      </h3>
       {alerts.selected === 0 && <div className="muted small">선택한 회차가 없습니다.</div>}
       {alerts.failed.length > 0 && (
         <div className="alert error small">
@@ -492,16 +475,29 @@ function AlertPanel({ alerts }: { alerts: Alerts }) {
         </div>
       )}
       {alerts.selected > 0 && alerts.list.length === 0 && alerts.failed.length === 0 && (
-        <div className="muted small">선택한 회차 중 주의할 회차가 없습니다.</div>
+        <div className="muted small">선택한 회차 중 알릴 내용이 없습니다.</div>
       )}
       <div className="alert-list">
-        {alerts.list.map((a, i) => (
-          <div key={i} className="alert warn">
-            <div className="alert-title"><span className="ico" aria-hidden="true">{a.kind === "soon" ? "⏰" : "⚠"}</span>{a.title}</div>
-            <div className="small">{a.text}</div>
-            <a className="btn sm" href={mailto(a)}>메일 초안 열기</a>
-          </div>
-        ))}
+        {alerts.list.map((a) => {
+          const to = recipients(a.pour);
+          return (
+            <div key={`${a.pour.id}-${a.key}`} className={`alert ${a.sentAt ? "info" : "warn"}`}>
+              <div className="alert-title">
+                <span className="ico" aria-hidden="true">{ALERT_ICON[a.kind]}</span>{title(a.pour)} · {KIND_LABEL[a.kind]}
+                {a.sentAt && <span className="badge neutral badge-gap">메일 초안 {fmtDateTime(a.sentAt)}</span>}
+              </div>
+              <div className="small">{a.text}</div>
+              <div className="row">
+                <a className="btn sm" href={mailtoUrl(a, `${window.location.origin}/pours/${a.pour.id}`)} onClick={() => record(a)}>
+                  {a.sentAt ? "초안 다시 열기" : "메일 초안 열기"}
+                </a>
+                {to.length > 0
+                  ? <span className="tiny">받는 사람 {to.join(", ")}</span>
+                  : <span className="tiny">받는 사람 미설정 · {demo ? "회차 설정에서 입력" : <Link to={`/pours/${a.pour.id}?tab=settings`}>회차 설정에서 입력</Link>}</span>}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

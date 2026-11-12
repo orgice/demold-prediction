@@ -16,6 +16,15 @@ export interface Pour {
   sensors: string[];
   note: string | null;
   test_count: number;
+  notify_emails?: string | null;    // 알림 메일 받을 주소 (쉼표 구분)
+  notice?: Notice | null;           // 마지막으로 보낸 알림 (없으면 아직 안 보냄)
+}
+
+/** 보낸 알림 기록: 마지막으로 보낸 시각, 그때의 기준별 예상 시각(키: "5"·"14"·설계강도), 알림 키별 보낸 시각 */
+export interface Notice {
+  at: string;
+  milestones: Record<string, string | null>;
+  sent: Record<string, string>;     // 알림 키별 보낸 시각
 }
 
 export type Member = "wall" | "slab";
@@ -135,7 +144,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let msg = `${res.status} ${res.statusText}`;
     try {
       const body = await res.json();
-      if (body.detail) msg = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      if (typeof body.detail === "string") msg = body.detail;
+      // 입력 검사 오류(422)는 [{msg: "Value error, …"}] 목록으로 온다 → 문구만 꺼낸다
+      else if (Array.isArray(body.detail)) msg = body.detail.map((d: { msg?: string }) => (d.msg ?? "").replace(/^Value error, /, "")).join(" / ");
     } catch { /* 본문 없음 */ }
     throw new ApiError(msg);
   }
@@ -169,6 +180,9 @@ export const api = {
     request<StrengthTest>(`/api/pours/${id}/tests/${testId}`, json("PUT", body)),
   deleteTest: (id: number, testId: number) =>
     request<void>(`/api/pours/${id}/tests/${testId}`, { method: "DELETE" }),
+  // 알림 메일 초안을 열었음을 기록 (같은 알림 반복 방지, 예측 변경 판단 기준)
+  recordNotice: (id: number, body: { key: string; milestones: Record<string, string | null> }) =>
+    request<Pour>(`/api/pours/${id}/notice`, json("POST", body)),
   // 제외 구간
   exclusions: (id: number) => request<Exclusion[]>(`/api/pours/${id}/exclusions`),
   addExclusion: (id: number, body: ExclusionIn) =>
