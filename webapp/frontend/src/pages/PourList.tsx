@@ -17,7 +17,7 @@ export default function PourList() {
       <div className="page-head">
         <div>
           <h1>타설 이력</h1>
-          <div className="muted small">전체 회차의 압축강도 예측과 해체 가능 예상 시각 (최신 센서 데이터 기준)</div>
+          <div className="muted small">회차별 압축강도 예측과 해체 가능 예상 시각</div>
         </div>
         <button className="btn primary" onClick={() => setCreating(true)}>+ 새 타설 등록</button>
       </div>
@@ -26,19 +26,19 @@ export default function PourList() {
       {data?.length === 0 && <div className="alert info">등록된 회차가 없습니다. ‘새 타설 등록’으로 시작하세요.</div>}
       <div className="grid cols-3">
         {data?.map(({ pour, error, current_strength, strength_28d, milestones, as_of, design_ratio_28d }) => (
-          <Link key={pour.id} to={`/pours/${pour.id}`} className="card" style={{ color: "inherit" }}>
+          <Link key={pour.id} to={`/pours/${pour.id}`} className="card pour-card">
             <div className="card-head">
               <div>
-                <h2>{pour.name}{pour.member && <span className="badge neutral" style={{ marginLeft: 6, verticalAlign: "middle" }}>{MEMBER_LABEL[pour.member]}</span>}</h2>
+                <h2>{pour.name}{pour.member && <span className="badge neutral badge-gap">{MEMBER_LABEL[pour.member]}</span>}</h2>
                 <div className="tiny">
                   타설 {fmtFull(pour.pour_start ?? pour.detected_start)}{" "}
                   {pour.pour_start ? <span className="badge good">확정</span> : <span className="badge warn">자동 추정</span>}
                 </div>
               </div>
               {current_strength != null && (
-                <div style={{ textAlign: "right" }}>
+                <div className="right">
                   <div className="tiny">현재 예측 강도</div>
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>{current_strength.toFixed(1)} MPa</div>
+                  <div className="big-num">{current_strength.toFixed(1)} MPa</div>
                   <div className="tiny">기준 {fmtDateTime(as_of)}</div>
                 </div>
               )}
@@ -51,14 +51,14 @@ export default function PourList() {
                     <tr key={m.label}>
                       <td>{m.label}</td>
                       <td>{fmtDateTime(m.expected)} <span className="tiny">({fmtAge(m.expected_age_h)})</span></td>
-                      <td style={{ textAlign: "right" }}><MilestoneBadge m={m} /></td>
+                      <td className="right"><MilestoneBadge m={m} /></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
             {strength_28d != null && (
-              <div className="tiny" style={{ marginTop: 8 }}>
+              <div className="tiny mt-2">
                 28일 예측 {strength_28d.toFixed(1)} MPa
                 {design_ratio_28d != null ? ` · 설계강도 대비 ${(design_ratio_28d * 100).toFixed(0)}%` : " · 설계강도 미입력"}
                 {" · "}공시체 {pour.test_count}건

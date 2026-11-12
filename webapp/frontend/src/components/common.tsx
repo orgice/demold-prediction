@@ -34,6 +34,18 @@ export function Loading({ text = "불러오는 중…" }: { text?: string }) {
   return <div className="muted small">{text}</div>;
 }
 
+/**
+ * ⓘ 설명 툴팁. 화면에 늘 띄울 필요는 없지만 궁금하면 볼 수 있어야 하는 설명을 여기에 넣는다.
+ * align: 화면 오른쪽 끝 근처면 "left", 왼쪽 끝 근처면 "right" (말풍선이 잘리지 않게)
+ */
+export function Info({ children, align }: { children: ReactNode; align?: "left" | "right" }) {
+  return (
+    <span className={`info ${align ?? ""}`} tabIndex={0} aria-label="설명 보기">
+      i<span className="info-tip" role="tooltip">{children}</span>
+    </span>
+  );
+}
+
 /** 화면 위에 뜨는 창. 바깥 어두운 부분을 누르면 닫힌다 */
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
