@@ -7,8 +7,8 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, Member, MEMBER_LABEL, Pour, UploadResult } from "../api/client";
-import { ErrorBox, Loading, useAsync } from "../components/common";
-import { fmtDateTime, fmtFull, fromInput } from "../format";
+import { ErrorBox, Info, Loading, useAsync } from "../components/common";
+import { fmtDateTime, fmtFull, fmtSensorSpan, fromInput } from "../format";
 
 const REASONS = ["탈형 작업", "센서 이상", "거푸집 설치 충격", "기타"];
 
@@ -47,7 +47,7 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
 
   return (
     <>
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="card stack">
         <h3>기본 정보</h3>
         <div className="form-row">
           <label className="field">이름<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
@@ -66,15 +66,14 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
           타설 시각은 '타설 시점 확인' 탭에서 확정합니다. 현재 {pour.pour_start ? `확정 ${fmtFull(pour.pour_start)}` : `자동 추정 ${fmtFull(pour.detected_start)}`}.
         </div>
 
-        <h3 style={{ marginTop: 6 }}>연결 센서</h3>
-        <div className="small muted">선택한 센서의 내부온도로 이 회차의 적산온도와 강도를 계산합니다.</div>
+        <h3 className="mt-2">연결 센서<Info align="right">선택한 센서의 내부온도로 이 회차의 적산온도와 강도를 계산합니다.</Info></h3>
         {sensors.loading && <Loading />}
         <div className="chips">
           {[...(sensors.data ?? [])].sort((a, b) => Number(macs.includes(b.mac)) - Number(macs.includes(a.mac)) || (a.last < b.last ? 1 : -1))
             .map((s) => (
               <label key={s.mac} className={`chip ${macs.includes(s.mac) ? "on" : ""}`}>
-                <input type="checkbox" checked={macs.includes(s.mac)} onChange={() => toggle(s.mac)} style={{ margin: 0 }} />
-                {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압·내부온도"} · {fmtDateTime(s.first).split(" ")[0]}~{fmtDateTime(s.last).split(" ")[0]}</span>
+                <input type="checkbox" checked={macs.includes(s.mac)} onChange={() => toggle(s.mac)} />
+                {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압·내부온도"} · {fmtSensorSpan(s.first, s.last, s.buckets)}</span>
               </label>
             ))}
         </div>
@@ -89,7 +88,7 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
       <FollowUpUpload onDone={() => { sensors.reload(); onSaved(); }} />
       <Exclusions pour={pour} onChanged={onSaved} />
 
-      <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div className="card row between">
         <div className="small muted">회차를 삭제해도 센서 원본 데이터는 남습니다.</div>
         <button className="btn danger" onClick={remove}>회차 삭제</button>
       </div>
@@ -112,12 +111,9 @@ function FollowUpUpload({ onDone }: { onDone: () => void }) {
     finally { setBusy(false); }
   };
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div className="card-head" style={{ marginBottom: 0 }}>
-        <div>
-          <h3>CSV 후속 데이터 추가</h3>
-          <div className="small muted">같은 센서의 이어지는 CSV를 올려 기존 기록 뒤에 붙입니다. 이미 있는 행은 건너뜁니다.</div>
-        </div>
+    <div className="card stack">
+      <div className="card-head">
+        <h3>CSV 후속 데이터 추가<Info align="right">같은 센서의 이어지는 CSV를 올려 기존 기록 뒤에 붙입니다. 이미 있는 행은 건너뜁니다.</Info></h3>
         <button className="btn" disabled={busy} onClick={() => input.current?.click()}>{busy ? "업로드·집계 중…" : "+ 후속 데이터 추가"}</button>
         <input ref={input} type="file" accept=".csv" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
       </div>
@@ -163,12 +159,9 @@ function Exclusions({ pour, onChanged }: { pour: Pour; onChanged: () => void }) 
   };
 
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div className="card-head" style={{ marginBottom: 0 }}>
-        <div>
-          <h3>측정 구간 제외</h3>
-          <div className="small muted">센서 이상이나 탈형 작업으로 값이 튄 구간을 지정해 강도 예측 계산에서 뺍니다. 원본 데이터는 고치지 않고 그대로 보존합니다.</div>
-        </div>
+    <div className="card stack">
+      <div className="card-head">
+        <h3>측정 구간 제외<Info align="right">센서 이상이나 탈형 작업으로 값이 튄 구간을 지정해 강도 예측 계산에서만 뺍니다. 원본 데이터는 고치지 않고 그대로 보존합니다.</Info></h3>
         <Link to={`/sensors?pour=${pour.id}`} className="btn sm">원본 보기</Link>
       </div>
       <div className="form-row">
@@ -177,7 +170,7 @@ function Exclusions({ pour, onChanged }: { pour: Pour; onChanged: () => void }) 
         <label className="field">사유
           <select value={reason} onChange={(e) => setReason(e.target.value)}>{REASONS.map((r) => <option key={r}>{r}</option>)}</select>
         </label>
-        <div className="actions" style={{ justifyContent: "flex-start" }}><button className="btn primary" onClick={add}>제외 구간 추가</button></div>
+        <div className="actions start"><button className="btn primary" onClick={add}>제외 구간 추가</button></div>
       </div>
       <ErrorBox error={err ?? list.error} />
       {list.data && list.data.length > 0 ? (
@@ -189,12 +182,12 @@ function Exclusions({ pour, onChanged }: { pour: Pour; onChanged: () => void }) 
                 <td>{fmtDateTime(x.start)} ~ {fmtDateTime(x.end)}</td>
                 <td>{x.reason ?? "—"}</td>
                 <td className="tiny">원본 유지</td>
-                <td style={{ textAlign: "right" }}><button className="btn sm" onClick={() => cancel(x.id)}>제외 취소</button></td>
+                <td className="right"><button className="btn sm" onClick={() => cancel(x.id)}>제외 취소</button></td>
               </tr>
             ))}</tbody>
           </table>
         </div>
-      ) : list.data && <div className="tiny">제외한 구간이 없습니다. 모든 측정값을 예측에 사용합니다.</div>}
+      ) : list.data && <div className="tiny">제외한 구간이 없습니다.</div>}
     </div>
   );
 }

@@ -9,9 +9,9 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, Pour, SeriesResponse } from "../api/client";
 import { Chart, sensorColor } from "../components/Chart";
-import { ErrorBox, Loading, useAsync } from "../components/common";
+import { ErrorBox, Info, Loading, useAsync } from "../components/common";
 import UploadPanel from "../components/UploadPanel";
-import { addHours, fmtDateTime, hoursBetween } from "../format";
+import { addHours, fmtDateTime, fmtSensorSpan, hoursBetween } from "../format";
 import type { Metric } from "../api/client";
 
 // 그래프 목록 (위에서부터 이 순서). 데이터가 없는 항목은 그래프를 그리지 않는다
@@ -93,11 +93,11 @@ export default function Sensors() {
       <div className="page-head">
         <div>
           <h1>센서 데이터</h1>
-          <div className="muted small">10분 중앙값 (45일이 넘으면 1시간 평균). 그래프는 드래그·휠과 아래 슬라이더로 확대합니다.</div>
+          <div className="muted small">센서별 측정값 원본 조회<Info align="right">10분 중앙값으로 그립니다 (45일이 넘으면 1시간 평균). 그래프는 드래그·휠과 아래 슬라이더로 확대합니다.</Info></div>
         </div>
       </div>
 
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="card stack">
         <div className="form-row">
           <label className="field">타설 회차로 이동
             <select value={pourId ?? ""} onChange={(e) => { const p = pours.data?.find((x) => x.id === Number(e.target.value)); if (p) goPour(p); }}>
@@ -117,9 +117,9 @@ export default function Sensors() {
         <div className="chips" aria-label="센서 선택">
           {chipOrder.map((s) => (
             <button key={s.mac} type="button" className={`chip ${macs.includes(s.mac) ? "on" : ""}`} aria-pressed={macs.includes(s.mac)}
-              onClick={() => toggle(s.mac)} title={`${fmtDateTime(s.first)} ~ ${fmtDateTime(s.last)}`}>
+              onClick={() => toggle(s.mac)} title="수집 기간 · 실제 데이터 양 (기간 중간이 비어 있을 수 있음)">
               <span className="dot" style={{ background: sensorColor(s.mac, allMacs.indexOf(s.mac)) }} />
-              {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압"} · {fmtDateTime(s.first).split(" ")[0]}~{fmtDateTime(s.last).split(" ")[0]}</span>
+              {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압"} · {fmtSensorSpan(s.first, s.last, s.buckets)}</span>
             </button>
           ))}
           {sensors.data?.length === 0 && <span className="tiny">저장된 센서 데이터가 없습니다. 아래에서 CSV를 불러오세요.</span>}
@@ -136,7 +136,7 @@ export default function Sensors() {
         if (series.length === 0) return null;
         return (
           <div className="card" key={metric}>
-            <h3 style={{ marginBottom: 4 }}>{title}</h3>
+            <h3 className="mb-2">{title}</h3>
             <Chart height={260} option={{
               tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ${unit}`) },
               xAxis: { type: "time" },

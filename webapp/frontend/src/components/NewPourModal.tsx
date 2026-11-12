@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, Member, MEMBER_LABEL, Pour, UploadResult } from "../api/client";
 import { CsvPeek, peekCsv } from "../csvPeek";
 import { fmtDateTime, fromInput } from "../format";
-import { ErrorBox, Modal, useAsync } from "./common";
+import { ErrorBox, Info, Modal, useAsync } from "./common";
 
 /** 올릴 파일 하나 + 미리 읽은 내용(peek) 또는 읽기 오류 */
 interface FileItem { file: File; peek?: CsvPeek; error?: string }
@@ -126,15 +126,15 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   return (
     <Modal title="새 타설 등록" onClose={busy ? () => undefined : onClose}>
       <div className="field">
-        <span className="small muted">데이터 파일</span>
+        <span>데이터 파일<Info align="right">이미 저장된 데이터로만 등록하려면 파일을 모두 빼세요.</Info></span>
         <div className="file-list">
           {files.map((f, i) => (
             <div key={i} className="file-row">
-              {f.peek && <span className={`badge ${f.peek.kind === "pressure" ? "info" : "good"}`}>{f.peek.kind === "pressure" ? "측압" : "수분"}</span>}
-              <div style={{ flex: 1, minWidth: 0 }}>
+              {f.peek && <span className="badge neutral">{f.peek.kind === "pressure" ? "측압" : "수분"}</span>}
+              <div className="grow">
                 <div className="small"><b>{f.file.name}</b> <span className="tiny">{(f.file.size / 1e6).toFixed(1)} MB</span></div>
                 <div className="tiny">
-                  {f.error ? <span style={{ color: "var(--bad)" }}>{f.error}</span>
+                  {f.error ? <span className="text-bad">{f.error}</span>
                     : f.peek ? `${f.peek.sensors.map((s) => s.mac).join(", ") || "센서 없음"} · ${fmtDateTime(f.peek.period_start)} ~ ${fmtDateTime(f.peek.period_end)}`
                     : "파일 읽는 중…"}
                 </div>
@@ -152,17 +152,16 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
           <input ref={input} type="file" accept=".csv" multiple hidden
             onChange={(e) => { add(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
         </div>
-        <span className="tiny">이미 저장된 데이터로만 등록하려면 파일을 모두 빼세요.</span>
       </div>
 
       <label className="field">이름<input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 용인 6회차" /></label>
-      <div className="form-row" style={{ alignItems: "start" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, color: "var(--text-2)" }}>
+      <div className="form-row top">
+        <div className="field">
           <span>타설 일시</span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input type="date" aria-label="타설 날짜" value={date} style={{ flex: 3, minWidth: 0 }}
+          <div className="row nowrap">
+            <input type="date" aria-label="타설 날짜" value={date} className="grow"
               onChange={(e) => { setTouched((t) => ({ ...t, date: true })); setDate(e.target.value); }} />
-            <input type="time" aria-label="타설 시작 시각" value={time} style={{ flex: 2, minWidth: 0 }}
+            <input type="time" aria-label="타설 시작 시각" value={time} className="w-time"
               onChange={(e) => setTime(e.target.value)} />
           </div>
           <span className="tiny">
@@ -179,19 +178,19 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
         </select>
       </label>
       <div className="field">
-        <span className="small muted">센서</span>
+        <span>센서</span>
         {candidates.length > 0 ? (
           <div className="chips">
             {candidates.map((m) => (
               <label key={m} className={`chip ${macs.includes(m) ? "on" : ""}`}>
-                <input type="checkbox" style={{ margin: 0 }} checked={macs.includes(m)} disabled={!!busy}
+                <input type="checkbox" checked={macs.includes(m)} disabled={!!busy}
                   onChange={() => setUnpicked((u) => (u.includes(m) ? u.filter((x) => x !== m) : [...u, m]))} />
                 {m}
               </label>
             ))}
           </div>
         ) : <span className="tiny">CSV를 추가하거나 타설일을 입력하면 센서를 찾아 미리 선택합니다.</span>}
-        {candidates.length > 0 && <span className="tiny">{macSource}을 미리 골랐습니다. 뺄 센서는 체크를 해제하세요.</span>}
+        {candidates.length > 0 && <span className="tiny">{macSource}을 미리 골랐습니다.</span>}
       </div>
       <ErrorBox error={err} />
       <div className="actions">
