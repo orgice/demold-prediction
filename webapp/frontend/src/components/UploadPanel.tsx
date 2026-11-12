@@ -71,7 +71,7 @@ export default function UploadPanel({ onUploaded }: { onUploaded?: () => void })
         onDragOver={(e) => { e.preventDefault(); setOver(true); }}
         onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); openRegister(Array.from(e.dataTransfer.files)); }}>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>CSV 파일을 끌어다 놓거나 클릭해서 새 타설 등록</div>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>CSV 파일을 끌어다 놓거나 클릭해서 새 타설 등록</div>
         <div className="tiny">측압·수분 파일은 컬럼으로 자동 구분합니다</div>
       </div>
       <div className="small muted">

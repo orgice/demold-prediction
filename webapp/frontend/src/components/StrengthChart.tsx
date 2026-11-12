@@ -8,14 +8,14 @@ import { Chart, useChartTheme } from "./Chart";
 
 /** 그래프 의미별 색 (범례와 같은 색) */
 export const LINE = {
-  initial: "#64748b",   // 최초 예측
-  observed: "#0f9b8e",  // 실측 기반 추정
-  forecast: "#f0601f",  // 수정 예측
-  target: "#9b72d6",    // 목표 강도
+  initial: "#666666",   // 최초 예측 (점선)
+  observed: "#0FB3A3",  // 실측(관측 온도) 기반 추정 — teal
+  forecast: "#F4800B",  // 가정 온도 기반 이후 예측 — orange
+  target: "#915CE0",    // 목표 강도 (5·14 MPa·설계강도) — purple
 };
 
 // 회차 비교 색: 회차 번호(정렬 순서)에 고정. 선택을 바꿔도 같은 회차는 같은 색
-const POUR_COLORS = ["#2a78d6", "#eb6834", "#7c4dcc", "#1baf7a", "#d6457a", "#9a6700", "#008a8a", "#5b6475"];
+const POUR_COLORS = ["#5E56F0", "#F4800B", "#0FB3A3", "#CB48AD", "#329BE7", "#818628", "#915CE0", "#3A4F8D"];
 export function pourColor(index: number) {
   return POUR_COLORS[((index % POUR_COLORS.length) + POUR_COLORS.length) % POUR_COLORS.length];
 }
@@ -91,7 +91,7 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
             ...pred.series.map((s) => api.coord([day(s.age_h), s.upper])),
             ...[...pred.series].reverse().map((s) => api.coord([day(s.age_h), s.lower])),
           ] },
-          style: { fill: LINE.forecast, opacity: 0.08 },
+          style: { fill: LINE.forecast, opacity: 0.12 },
         }) },
       { name: "실측 기반 추정", type: "line", symbol: "none", data: obs.map((s) => [day(s.age_h), s.strength]),
         lineStyle: { width: 2.5, color: LINE.observed }, itemStyle: { color: LINE.observed }, z: 3,
@@ -103,14 +103,14 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
           data: [{ xAxis: nowX }] } },
       { name: "수정 예측", type: "line", symbol: "none", data: fut.map((s) => [day(s.age_h), s.strength]),
         lineStyle: { width: 2.5, color: LINE.forecast }, itemStyle: { color: LINE.forecast }, z: 2,
-        endLabel: compact ? undefined : { show: true, formatter: `${f1(pred.strength_28d)} MPa`, color: LINE.forecast, fontWeight: 600 } },
+        endLabel: compact ? undefined : { show: true, formatter: `${f1(pred.strength_28d)} MPa`, color: LINE.forecast, fontWeight: 700 } },
       ...(pred.baseline ? [{
         name: "최초 예측", type: "line", symbol: "none", z: 1,
         data: pred.baseline.series.map((b) => [day(b.age_h), b.strength]),
         lineStyle: { width: 2, type: [8, 5], color: LINE.initial }, itemStyle: { color: LINE.initial },
       }] : []),
       { name: "목표 강도", type: "line", data: [], itemStyle: { color: LINE.target }, lineStyle: { type: "dotted", color: LINE.target },
-        markLine: { symbol: "none", silent: true, lineStyle: { color: LINE.target, type: "dashed", width: 1 },
+        markLine: { symbol: "none", silent: true, lineStyle: { color: LINE.target, type: "dotted", width: 1 },
           label: { show: !compact, formatter: "{b}", position: "end", color: LINE.target, fontSize: 11 }, data: targetLines(design) } },
       { name: "공시체", type: "scatter", symbolSize: compact ? 7 : 10, z: 4,
         data: tests.map((t) => [day(t.age_h), t.fc]),
