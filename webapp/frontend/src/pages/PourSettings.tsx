@@ -1,5 +1,5 @@
 // [회차 상세 › 설정 탭] 화면설계서 12쪽, 수행계획서 '센서와 타설 연결'·'데이터 상태 확인'
-//   ① 기본 정보 (이름·현장·부재 종류·설계기준강도·메모)
+//   ① 기본 정보 (이름·현장·부재 종류·설계기준강도·알림 받을 메일·메모)
 //   ② 연결 센서 선택·변경 → 이 회차 예측에 쓸 센서
 //   ③ CSV 후속 데이터 추가 (같은 센서의 이어지는 기록, 중복 행은 건너뜀)
 //   ④ 측정 구간 제외: 센서 이상·탈형 작업으로 튄 구간을 예측 계산에서만 뺀다 (원본은 그대로)
@@ -17,7 +17,7 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
   const sensors = useAsync(api.sensors, []);
   const [f, setF] = useState({
     name: pour.name, site: pour.site ?? "", design: pour.design_strength?.toString() ?? "",
-    note: pour.note ?? "", member: (pour.member ?? "") as Member | "",
+    note: pour.note ?? "", member: (pour.member ?? "") as Member | "", emails: pour.notify_emails ?? "",
   });
   const [macs, setMacs] = useState<string[]>(pour.sensors);
   const [msg, setMsg] = useState<string | null>(null);
@@ -28,10 +28,12 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
     if (!f.name.trim()) return setErr("이름을 입력하세요.");
     if (macs.length === 0) return setErr("연결 센서를 하나 이상 선택하세요.");
     try {
-      await api.updatePour(pour.id, {
+      const saved = await api.updatePour(pour.id, {
         name: f.name.trim(), site: f.site || null, note: f.note || null,
         design_strength: f.design ? Number(f.design) : null, member: f.member || null, sensors: macs,
+        notify_emails: f.emails.trim() || null,
       });
+      setF((x) => ({ ...x, emails: saved.notify_emails ?? "" }));   // 서버가 정리한 주소 형태로 (중복 제거·쉼표 구분)
       setMsg("저장했습니다. 그래프와 예측값을 다시 계산합니다."); onSaved();
     } catch (e) { setErr((e as Error).message); }
   };
@@ -43,7 +45,7 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
   };
   const toggle = (m: string) => setMacs((x) => (x.includes(m) ? x.filter((y) => y !== m) : [...x, m]));
   const dirty = f.name !== pour.name || f.site !== (pour.site ?? "") || f.design !== (pour.design_strength?.toString() ?? "")
-    || f.note !== (pour.note ?? "") || f.member !== (pour.member ?? "") || [...macs].sort().join() !== [...pour.sensors].sort().join();
+    || f.note !== (pour.note ?? "") || f.member !== (pour.member ?? "") || f.emails !== (pour.notify_emails ?? "") || [...macs].sort().join() !== [...pour.sensors].sort().join();
 
   return (
     <>
@@ -61,6 +63,11 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
           <label className="field">설계기준강도 (MPa)<input type="number" value={f.design} placeholder="배합표 확인 후 입력"
             onChange={(e) => setF({ ...f, design: e.target.value })} /></label>
         </div>
+        <label className="field">알림 받을 메일
+          <input type="text" inputMode="email" value={f.emails} placeholder="예: site@company.com, manager@company.com"
+            onChange={(e) => setF({ ...f, emails: e.target.value })} />
+          <span className="tiny">대시보드 강도 알림의 메일 초안에 받는 사람으로 들어갑니다. 여러 명은 쉼표로 구분합니다.</span>
+        </label>
         <label className="field">메모<textarea rows={2} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></label>
         <div className="tiny">
           타설 시각은 '타설 시점 확인' 탭에서 확정합니다. 현재 {pour.pour_start ? `확정 ${fmtFull(pour.pour_start)}` : `자동 추정 ${fmtFull(pour.detected_start)}`}.
@@ -80,7 +87,7 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
         <ErrorBox error={err} />
         {msg && <div className="alert success small">{msg}</div>}
         <div className="actions">
-          <button className="btn" disabled={!dirty} onClick={() => { setF({ name: pour.name, site: pour.site ?? "", design: pour.design_strength?.toString() ?? "", note: pour.note ?? "", member: (pour.member ?? "") as Member | "" }); setMacs(pour.sensors); }}>취소</button>
+          <button className="btn" disabled={!dirty} onClick={() => { setF({ name: pour.name, site: pour.site ?? "", design: pour.design_strength?.toString() ?? "", note: pour.note ?? "", member: (pour.member ?? "") as Member | "", emails: pour.notify_emails ?? "" }); setMacs(pour.sensors); }}>취소</button>
           <button className="btn primary" disabled={!dirty} onClick={save}>변경 내용 저장</button>
         </div>
       </div>

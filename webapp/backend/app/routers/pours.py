@@ -10,6 +10,7 @@
 
 데이터가 바뀌는 API는 끝에 maturity.clear_cache()를 불러 예측을 새로 계산하게 한다.
 """
+import json
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,7 +21,7 @@ from .. import maturity
 from ..db import engine, get_session
 from ..models import ExcludedRange, Pour, StrengthTest
 from ..pour_detect import detect_pour, load_pressure_minutes
-from ..schemas import (ExclusionIn, ExclusionOut, PourIn, PourOut, PourPatch, StrengthTestIn,
+from ..schemas import (ExclusionIn, ExclusionOut, NoticeIn, NoticeOut, PourIn, PourOut, PourPatch, StrengthTestIn,
                        StrengthTestOut)
 
 router = APIRouter(prefix="/api/pours", tags=["타설"])
@@ -31,7 +32,8 @@ def to_out(p: Pour) -> PourOut:
     return PourOut(id=p.id, name=p.name, site=p.site, pour_start=p.pour_start, pour_end=p.pour_end,
                    detected_start=p.detected_start, detected_end=p.detected_end,
                    design_strength=p.design_strength, member=p.member, sensors=p.sensor_list, note=p.note,
-                   test_count=len(p.tests))
+                   test_count=len(p.tests), notify_emails=p.notify_emails,
+                   notice=NoticeOut(**json.loads(p.notice)) if p.notice else None)
 
 
 def all_pours(s: Session) -> list[Pour]:
@@ -196,6 +198,23 @@ def delete_test(pour_id: int, test_id: int, s: Session = Depends(get_session)):
     s.delete(t)
     s.commit()
     maturity.clear_cache()
+
+
+# ---------- 알림 메일 기록 ----------
+@router.post("/{pour_id}/notice", response_model=PourOut)
+def record_notice(pour_id: int, body: NoticeIn, s: Session = Depends(get_session)):
+    """알림 메일 초안을 열었다고 기록한다. 같은 알림을 다시 띄우지 않고, 다음 '예측 변경' 판단의 기준이 된다.
+    메일 발송 자체는 사용자의 메일 앱이 한다 (수행계획서: 초안 자동 작성 · 발송은 사용자)."""
+    p = get_pour(s, pour_id)
+    sent = json.loads(p.notice)["sent"] if p.notice else {}
+    now = (datetime.utcnow() + timedelta(hours=9)).isoformat(timespec="seconds")   # 한국 시간 (컨테이너 시계는 UTC)
+    sent.pop(body.key, None)
+    sent[body.key] = now
+    p.notice = json.dumps({"at": now,
+                           "milestones": {k: v.isoformat() if v else None for k, v in body.milestones.items()},
+                           "sent": dict(list(sent.items())[-50:])})   # 오래된 기록은 50개까지만
+    s.commit()
+    return to_out(get_pour(s, pour_id))
 
 
 # ---------- 제외 구간 ----------

@@ -126,19 +126,19 @@ b, strong { font-weight: 700; }
 .table-empty { padding: var(--s3); }
 
 /* ⓘ 설명 툴팁: 마우스를 올리거나 Tab으로 포커스하면 보인다 */
-.info { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none;
+.info-dot { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none;
   width: 16px; height: 16px; margin-left: 6px; vertical-align: middle; border-radius: 50%;
   border: 1px solid var(--text-3); color: var(--text-3); font-size: 10px; font-weight: 700; font-style: normal;
   line-height: 1; cursor: help; user-select: none; }
-.info:hover, .info:focus-visible { color: var(--text); border-color: var(--text); outline: none; }
+.info-dot:hover, .info-dot:focus-visible { color: var(--text); border-color: var(--text); outline: none; }
 .info-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 40;
   width: max-content; max-width: min(300px, 80vw); padding: 8px 10px; border-radius: 8px;
   background: var(--text); color: var(--surface); font-size: 12px; font-weight: 400; line-height: 1.55; letter-spacing: 0;
   text-align: left; white-space: normal; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.12s; }
-.info:hover .info-tip, .info:focus .info-tip { opacity: 1; visibility: visible; }
-.info.left .info-tip { left: auto; right: -8px; transform: none; }
-.info.right .info-tip { left: -8px; transform: none; }
+.info-dot:hover .info-tip, .info-dot:focus .info-tip { opacity: 1; visibility: visible; }
+.info-dot.left .info-tip { left: auto; right: -8px; transform: none; }
+.info-dot.right .info-tip { left: -8px; transform: none; }
 
 .card { background: var(--surface); border: none; border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
 .card .card { box-shadow: none; background: var(--bg); }
@@ -306,7 +306,7 @@ tbody tr:hover { background: var(--hover); }
 .banner-label { font-size: 12px; line-height: 16px; font-weight: 700; color: var(--accent); }
 .banner-title { font-size: 24px; line-height: 32px; letter-spacing: -0.4px; font-weight: 700; margin-top: 4px; color: var(--text); }
 .banner-sub { font-size: 13px; line-height: 18px; color: var(--banner-sub); margin-top: 4px; max-width: 560px; }
-.banner .info { color: var(--banner-sub); border-color: var(--banner-sub); }
+.banner .info-dot { color: var(--banner-sub); border-color: var(--banner-sub); }
 .banner-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; max-width: 100%; }
 .banner-actions select { max-width: 100%; background: var(--surface); }
 .banner .btn { background: var(--surface); box-shadow: var(--shadow); }

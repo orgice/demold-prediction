@@ -40,7 +40,7 @@ export function Loading({ text = "불러오는 중…" }: { text?: string }) {
  */
 export function Info({ children, align }: { children: ReactNode; align?: "left" | "right" }) {
   return (
-    <span className={`info ${align ?? ""}`} tabIndex={0} aria-label="설명 보기">
+    <span className={`info-dot ${align ?? ""}`} tabIndex={0} aria-label="설명 보기">
       i<span className="info-tip" role="tooltip">{children}</span>
     </span>
   );
