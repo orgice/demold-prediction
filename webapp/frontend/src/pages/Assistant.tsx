@@ -3,6 +3,7 @@
 // 대화는 이 화면에만 있고 저장되지 않는다 (새로고침하면 사라짐).
 import { useEffect, useRef, useState } from "react";
 import { AgentStep, api, ChatMessage } from "../api/client";
+import { Info } from "../components/common";
 
 /** 말풍선 하나: 질문 또는 답변 (+ AI가 부른 도구 목록, 걸린 시간, 오류 여부) */
 interface Turn extends ChatMessage { steps?: AgentStep[]; elapsed_ms?: number; error?: boolean }
@@ -61,8 +62,8 @@ export default function Assistant() {
         <div>
           <h1>AI 상담</h1>
           <div className="muted small">
-            해체 시점·강도·온도를 물어보세요. AI가 예측 기능을 직접 불러서 답합니다.
-            강도와 시각은 적산온도 모델이 계산한 값이며, 최종 판단은 현장 책임자가 합니다.
+            해체 시점·강도·온도를 물어보세요
+            <Info align="right">AI가 예측 기능을 직접 불러서 답합니다. 강도와 시각은 적산온도 모델이 계산한 값이며, 최종 판단은 현장 책임자가 합니다.</Info>
           </div>
         </div>
         {turns.length > 0 && <button className="btn" onClick={() => setTurns([])} disabled={busy}>새 대화</button>}

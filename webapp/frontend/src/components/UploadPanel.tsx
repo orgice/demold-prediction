@@ -4,7 +4,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Pour, UploadResult } from "../api/client";
-import { ErrorBox, useAsync } from "./common";
+import { ErrorBox, Info, useAsync } from "./common";
 import NewPourModal, { NewPourResult } from "./NewPourModal";
 import { fmtFull } from "../format";
 
@@ -47,18 +47,19 @@ export default function UploadPanel({ onUploaded }: { onUploaded?: () => void })
   };
 
   return (
-    <section className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div className="card-head" style={{ marginBottom: 0 }}>
+    <section className="card stack loose">
+      <div className="card-head">
         <div>
           <h2>센서 데이터 불러오기</h2>
           <div className="muted small">
-            측압·수분 CSV를 올리면서 새 타설을 함께 등록합니다. 이미 들어간 행은 자동으로 건너뜁니다.
+            CSV를 올리며 새 타설을 함께 등록합니다
+            <Info>측압·수분 파일은 컬럼으로 자동 구분합니다. 이미 저장된 행은 자동으로 건너뜁니다.</Info>
           </div>
         </div>
         <button className="btn primary" onClick={() => openRegister(files)}>+ 새 타설 등록</button>
       </div>
       {created && (
-        <div className="alert success" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div className="alert success row between">
           <span>
             {results ? `파일 ${results.length}개(${results.reduce((n, r) => n + r.rows_inserted, 0).toLocaleString()}행)를 저장하고 ` : ""}
             타설 이력에 <b>{created.name}</b>을(를) 등록했습니다.
@@ -71,8 +72,7 @@ export default function UploadPanel({ onUploaded }: { onUploaded?: () => void })
         onDragOver={(e) => { e.preventDefault(); setOver(true); }}
         onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); openRegister(Array.from(e.dataTransfer.files)); }}>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>CSV 파일을 끌어다 놓거나 클릭해서 새 타설 등록</div>
-        <div className="tiny">측압·수분 파일은 컬럼으로 자동 구분합니다</div>
+        <div className="dropzone-title">CSV 파일을 끌어다 놓거나 클릭해서 새 타설 등록</div>
       </div>
       <div className="small muted">
         기존 회차에 이어지는 데이터라면{" "}
@@ -95,7 +95,7 @@ export default function UploadPanel({ onUploaded }: { onUploaded?: () => void })
       <ErrorBox error={err} />
       {results && (
         <div className="table-wrap">
-          <h3 style={{ marginBottom: 8 }}>업로드 결과</h3>
+          <h3 className="mb-2">업로드 결과</h3>
           <table>
             <thead><tr><th>파일</th><th>종류</th><th>새로 저장</th><th>전체 행</th><th>기간</th><th>센서</th></tr></thead>
             <tbody>{results.map((r) => (

@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api, MEMBER_LABEL, Pour, StrengthTest, StrengthTestIn } from "../api/client";
 import { Chart, sensorColor, useChartTheme } from "../components/Chart";
-import { ErrorBox, Loading, MilestoneRow, useAsync } from "../components/common";
+import { ErrorBox, Info, Loading, MilestoneRow, useAsync } from "../components/common";
 import { StrengthChart, TempChart, testPoints } from "../components/StrengthChart";
 import { fmtFull, fromInput, toInput } from "../format";
 import SettingsTab from "./PourSettings";
@@ -37,10 +37,10 @@ export default function PourDetail() {
     <main className="page">
       <div className="page-head">
         <div>
-          <h1>{p.name}{p.member && <span className="badge neutral" style={{ verticalAlign: "middle", marginLeft: 8 }}>{MEMBER_LABEL[p.member]}</span>}</h1>
+          <h1>{p.name}{p.member && <span className="badge neutral badge-gap">{MEMBER_LABEL[p.member]}</span>}</h1>
           <div className="muted small">
             {p.site ? `${p.site} · ` : ""}타설 시작 {fmtFull(p.pour_start ?? p.detected_start)}{" "}
-            {p.pour_start ? <span className="badge good">확정</span> : <span className="badge warn">자동 추정 — 확인 필요</span>}
+            {p.pour_start ? <span className="badge neutral">확정</span> : <span className="badge warn">자동 추정 — 확인 필요</span>}
             {" "}· 센서 {p.sensors.join(", ")}
           </div>
         </div>
@@ -71,15 +71,15 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
       <div className="grid kpis">
         <div className="kpi">
           <div className="label">현재 예측 강도</div>
-          <div className="value">{pred.current_strength.toFixed(1)} MPa</div>
+          <div className="value">{pred.current_strength.toFixed(1)}<span className="unit">MPa</span></div>
           <div className="sub">90% 범위 {pred.current_range[0].toFixed(1)}–{pred.current_range[1].toFixed(1)}</div>
         </div>
         <div className="kpi">
           <div className="label">28일 예측 강도</div>
-          <div className="value">{pred.strength_28d.toFixed(1)} MPa</div>
+          <div className="value">{pred.strength_28d.toFixed(1)}<span className="unit">MPa</span></div>
           <div className="sub">
             {pred.design_ratio_28d != null
-              ? `설계강도 대비 ${(pred.design_ratio_28d * 100).toFixed(0)}%${pred.design_ratio_28d < 1 ? " — 양생 관리 필요" : ""}`
+              ? <>설계강도 대비 {(pred.design_ratio_28d * 100).toFixed(0)}%{pred.design_ratio_28d < 1 && <span className="text-warn"> · 양생 관리 필요</span>}</>
               : "설계강도 미입력 (설정 탭)"}
           </div>
         </div>
@@ -96,30 +96,32 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
 
       <div className="grid split">
         <div className="card">
-          <div className="card-head"><h3>최초 예측과 실측 기반 추정</h3><span className="tiny">옅은 주황 음영 = 90% 범위</span></div>
+          <div className="card-head">
+            <h3>최초 예측과 실측 기반 추정
+              <Info align="right">회색 점선은 최초 예측(타설 후 24시간 시점), 초록선은 실측 온도로 계산한 값, 주황선은 현재 시점에서 이어지는 수정 예측입니다. 옅은 주황 음영은 90% 범위입니다. 범례에 마우스를 올려도 설명이 나옵니다.</Info>
+            </h3>
+          </div>
           <StrengthChart pred={pred} design={pour.design_strength} />
-          <div className="tiny">점선은 최초 예측(타설 후 24시간 시점), 초록선은 실측 온도로 계산한 값, 주황선은 현재 시점에서 이어지는 수정 예측입니다.</div>
         </div>
-        <div className="card">
-          <h3 style={{ marginBottom: 12 }}>해체 가능 예상 시각</h3>
+        <div className="card stack">
+          <h3>해체 가능 예상 시각
+            <Info align="left">벽·기둥 측면 5 MPa, 슬래브 밑면 14 MPa (KCS 14 20 12). 보수적 시각은 90% 하한이 기준에 닿는 시각이며, 현장 판단은 이 시각 기준을 권장합니다.</Info>
+          </h3>
           <div className="milestones">{pred.milestones.map((m) => (
             <MilestoneRow key={m.label} m={m}
               baseAgeH={pred.baseline?.milestones.find((b) => b.label === m.label)?.expected_age_h} />
           ))}</div>
-          <div className="tiny" style={{ marginTop: 10 }}>
-            벽·기둥 측면 5 MPa, 슬래브 밑면 14 MPa (KCS 14 20 12). 현장 판단은 보수적 시각 기준을 권장합니다.
-          </div>
         </div>
       </div>
 
       <div className="card">
-        <div className="card-head"><h3>콘크리트 내부온도</h3><span className="tiny">점선 = 최근 24시간 패턴을 반복한다는 가정</span></div>
+        <div className="card-head"><h3>콘크리트 내부온도<Info align="right">점선은 최근 24시간 온도 패턴이 반복된다고 가정한 예측입니다.</Info></h3></div>
         <TempChart pred={pred} />
       </div>
 
       <details className="card small">
         <summary>모델 정보</summary>
-        <div className="muted" style={{ marginTop: 8 }}>
+        <div className="muted mt-2">
           {pred.model.method} ·{" "}
           {pred.model.fixed_curve
             ? "고정 곡선 (학습할 공시체 회차가 2개 미만)"
@@ -185,28 +187,26 @@ function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
     <>
       <div className="card">
         <div className="card-head">
-          <h3>타설일 측압 (1분 중앙값, 60kg 초과 제거)</h3>
+          <h3>타설일 측압
+            <Info align="right">1분 중앙값, 60 kg 초과값은 제거했습니다. 타설 중에는 측압이 층마다 계단식으로 오르고, 끝나면 최고점 이후 서서히 내려갑니다. 짧게 튀는 값은 거푸집 설치 중 망치질일 수 있습니다.</Info>
+          </h3>
           <button className="btn sm" onClick={redetect}>자동 추정 다시 하기</button>
         </div>
-        <div className="tiny" style={{ marginBottom: 8 }}>
-          타설 중에는 측압이 층마다 계단식으로 오르고, 타설이 끝나면 최고점 이후 서서히 내려갑니다.
-          드래그·휠로 확대해서 시작과 종료를 확인하세요. 짧게 튀는 값은 거푸집 설치 중 망치질일 수 있습니다.
-        </div>
+        <div className="tiny mb-2">드래그·휠로 확대해 시작과 종료를 확인하세요.</div>
         {day.loading && <Loading />}
         <ErrorBox error={day.error} />
         {option && Object.keys(day.data!.series).length > 0 ? <Chart option={option} height={400} />
           : !day.loading && <div className="alert info">이 날짜의 측압 데이터가 없습니다.</div>}
       </div>
-      <div className="card">
-        <h3 style={{ marginBottom: 10 }}>타설 시각 확정</h3>
-        <div className="small muted" style={{ marginBottom: 10 }}>
-          자동 추정: {fmtFull(pour.detected_start)} ~ {fmtFull(pour.detected_end)}.
-          실제 시각(작업일지·레미콘 송장)을 알면 입력하세요. 적산온도는 <b>타설 시작</b>부터 계산합니다.
-        </div>
+      <div className="card stack">
+        <h3>타설 시각 확정
+          <Info align="right">실제 시각(작업일지·레미콘 송장)을 알면 입력하세요. 적산온도는 타설 시작부터 계산합니다.</Info>
+        </h3>
+        <div className="small muted">자동 추정 {fmtFull(pour.detected_start)} ~ {fmtFull(pour.detected_end)}</div>
         <div className="form-row">
           <label className="field">타설 시작<input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></label>
           <label className="field">타설 종료<input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
-          <div className="actions" style={{ justifyContent: "flex-start" }}>
+          <div className="actions start">
             <button className="btn primary" onClick={() => save(fromInput(start), fromInput(end))}>저장</button>
             <button className="btn" onClick={() => { setStart(toInput(pour.detected_start)); setEnd(toInput(pour.detected_end)); }}>
               추정값 넣기
@@ -214,7 +214,7 @@ function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
             {pour.pour_start && <button className="btn" onClick={() => { setStart(""); setEnd(""); save(null, null); }}>확정 해제</button>}
           </div>
         </div>
-        {msg && <div className="alert info" style={{ marginTop: 10 }}>{msg}</div>}
+        {msg && <div className="alert info">{msg}</div>}
         <ErrorBox error={err} />
       </div>
     </>
@@ -257,12 +257,11 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
 
   return (
     <>
-      <div className="card">
-        <h3 style={{ marginBottom: 10 }}>{editing ? "공시체 결과 수정" : "공시체 결과 입력"}</h3>
-        <div className="small muted" style={{ marginBottom: 10 }}>
-          시험기관 보고서의 평균 압축강도(MPa) 하나를 입력합니다. 재령 1.6일 이하 현장양생 결과는 이 회차 예측 보정에 쓰이고
-          (1일 공시체 하나로도 14 MPa 도달 시각 오차가 크게 줄어듭니다), 수중양생 결과는 기록만 하고 보정에는 쓰지 않습니다.
-        </div>
+      <div className="card stack">
+        <h3>{editing ? "공시체 결과 수정" : "공시체 결과 입력"}
+          <Info align="right">재령 1.6일 이하 현장양생 결과는 이 회차 예측 보정에 쓰입니다 (1일 공시체 하나로도 14 MPa 도달 시각 오차가 크게 줄어듭니다). 수중양생 결과는 기록만 하고 보정에는 쓰지 않습니다.</Info>
+        </h3>
+        <div className="small muted">시험기관 보고서의 평균 압축강도(MPa)를 입력합니다.</div>
         <div className="form-row">
           <label className="field">시험 일시<input type="datetime-local" value={toInput(form.test_datetime)}
             onChange={(e) => setForm({ ...form, test_datetime: fromInput(e.target.value) ?? "" })} /></label>
@@ -273,7 +272,7 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
           <label className="field">평균 압축강도 (MPa)<input type="number" step="0.1" value={form.s1 ?? ""}
             onChange={(e) => setForm({ ...form, s1: num(e.target.value), s2: null, s3: null })} /></label>
         </div>
-        <div className="actions" style={{ marginTop: 12 }}>
+        <div className="actions">
           {editing && <button className="btn" onClick={() => { setEditing(null); setForm(emptyTest()); }}>취소</button>}
           <button className="btn primary" onClick={submit}>{editing ? "수정 저장" : "추가"}</button>
         </div>
@@ -290,7 +289,7 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
                 <td>{t.curing === "field" ? "현장" : "수중"}</td>
                 <td><b>{t.average?.toFixed(1) ?? "—"}</b></td>
                 <td className="tiny">{t.note}</td>
-                <td style={{ whiteSpace: "nowrap" }}>
+                <td className="nowrap">
                   <button className="btn sm" onClick={() => edit(t)}>수정</button>{" "}
                   <button className="btn sm danger" onClick={() => remove(t)}>삭제</button>
                 </td>
@@ -298,7 +297,7 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
             ))}
           </tbody>
         </table>
-        {tests.data?.length === 0 && <div className="muted small" style={{ padding: 12 }}>아직 입력된 결과가 없습니다.</div>}
+        {tests.data?.length === 0 && <div className="muted small table-empty">아직 입력된 결과가 없습니다.</div>}
       </div>
     </>
   );
