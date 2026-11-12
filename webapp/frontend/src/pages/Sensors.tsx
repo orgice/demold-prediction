@@ -11,7 +11,7 @@ import { api, Pour, SeriesResponse } from "../api/client";
 import { Chart, sensorColor } from "../components/Chart";
 import { ErrorBox, Loading, useAsync } from "../components/common";
 import UploadPanel from "../components/UploadPanel";
-import { addHours, fmtDateTime, hoursBetween } from "../format";
+import { addHours, fmtDateTime, fmtSensorSpan, hoursBetween } from "../format";
 import type { Metric } from "../api/client";
 
 // 그래프 목록 (위에서부터 이 순서). 데이터가 없는 항목은 그래프를 그리지 않는다
@@ -117,9 +117,9 @@ export default function Sensors() {
         <div className="chips" aria-label="센서 선택">
           {chipOrder.map((s) => (
             <button key={s.mac} type="button" className={`chip ${macs.includes(s.mac) ? "on" : ""}`} aria-pressed={macs.includes(s.mac)}
-              onClick={() => toggle(s.mac)} title={`${fmtDateTime(s.first)} ~ ${fmtDateTime(s.last)}`}>
+              onClick={() => toggle(s.mac)} title="수집 기간 · 실제 데이터 양 (기간 중간이 비어 있을 수 있음)">
               <span className="dot" style={{ background: sensorColor(s.mac, allMacs.indexOf(s.mac)) }} />
-              {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압"} · {fmtDateTime(s.first).split(" ")[0]}~{fmtDateTime(s.last).split(" ")[0]}</span>
+              {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압"} · {fmtSensorSpan(s.first, s.last, s.buckets)}</span>
             </button>
           ))}
           {sensors.data?.length === 0 && <span className="tiny">저장된 센서 데이터가 없습니다. 아래에서 CSV를 불러오세요.</span>}
