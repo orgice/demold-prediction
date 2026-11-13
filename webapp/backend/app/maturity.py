@@ -103,27 +103,25 @@ class PredictionError(ValueError):
 
     여기 적은 문구가 화면에 그대로 보이므로, 사용자가 무엇을 하면 되는지 알 수 있게 쓴다.
     """
-    pass
 
 
 # ━━━━━━━━━━ 온도 · 적산온도 (1단계) ━━━━━━━━━━
 def temperature(engine: Engine, macs: list[str], start: datetime, end: datetime) -> pd.Series:
     """센서들이 잰 온도를 10분 간격으로 가져온다.
 
+    - 구조물 내부온도(temp_in)만 쓴다.
     - macs: 센서 이름(MAC 주소) 목록. 한 회차에 센서가 여러 개면 같은 시각 값을 평균 낸다.
-    - 구조물 내부온도를 쓰고, 내부온도가 비어 있는 칸만 바깥 공기 온도로 채운다.
     - 6시간 이내의 짧은 빈 구간(센서 일시 끊김)은 앞뒤 값을 직선으로 이어 채운다.
       그보다 긴 공백은 그대로 비워 둔다 (모르는 값을 지어내지 않기 위해).
     """
     if not macs:
         return pd.Series(dtype=float)
-    q = text("SELECT mac, bucket, temp_in, temp_out FROM sensor_10min "
+    q = text("SELECT bucket, temp_in FROM sensor_10min "
              "WHERE mac IN :macs AND bucket >= :a AND bucket < :b").bindparams(bindparam("macs", expanding=True))
     d = pd.read_sql(q, engine, params={"macs": macs, "a": start, "b": end})
     if d.empty:
         return pd.Series(dtype=float)
-    g = d.groupby("bucket")[["temp_in", "temp_out"]].mean()   # 같은 10분 칸의 여러 센서 값을 평균
-    t = g.temp_in.fillna(g.temp_out)                           # 내부온도가 없으면 바깥 온도로
+    t = d.groupby("bucket").temp_in.mean()   # 같은 10분 칸의 여러 센서 값을 평균
     t = t.reindex(pd.date_range(t.index.min(), t.index.max(), freq=STEP))   # 빠진 10분 칸도 자리를 만든다
     return t.interpolate(limit=36, limit_area="inside")  # 36칸 = 6시간 이내 공백만 직선으로 채움
 
@@ -136,13 +134,13 @@ def pour_temperature(engine: Engine, pour, start: datetime, end: datetime) -> pd
     뺀 자리는 앞뒤 값을 직선으로 이어 채운다.
     """
     T = temperature(engine, pour.sensor_list, start, end)
-    for e in getattr(pour, "exclusions", []) or []:
+    for e in pour.exclusions:
         T[(T.index >= e.start) & (T.index < e.end)] = np.nan   # 제외 구간을 일단 빈칸으로
     if T.empty:
         return T
     filled = T.interpolate(limit_area="inside")
     # 제외 구간만 채우고, 원래부터 비어 있던 긴 공백(센서가 꺼져 있던 때)은 그대로 둔다
-    for e in getattr(pour, "exclusions", []) or []:
+    for e in pour.exclusions:
         m = (T.index >= e.start) & (T.index < e.end)
         T[m] = filled[m]
     return T
@@ -265,7 +263,7 @@ def train(engine: Engine, pours: list, exclude_id: int | None):
     """
     # 같은 조건(회차·타설 시각·공시체 수·센서·제외 구간)이면 기억해 둔 결과를 쓴다
     key = (exclude_id, tuple(sorted((p.id, p.start, len(p.tests), p.sensors,
-                                     tuple((e.start, e.end) for e in getattr(p, "exclusions", []) or []))
+                                     tuple((e.start, e.end) for e in p.exclusions))
                                     for p in pours)))
     if key in _cache:
         return _cache[key]
@@ -345,7 +343,7 @@ def first_crossing(series: pd.Series, thr: float):
     return hit.index[0] if not hit.empty else None
 
 
-def observed_crossing(tests: pd.DataFrame, start: datetime, thr: float):
+def observed_crossing(tests: pd.DataFrame, thr: float):
     """공시체 결과로 본 '실제' 도달 시각 (화면의 '실측 보간').
 
     공시체는 정해진 날에만 시험하므로 정확한 도달 순간은 모른다.
@@ -434,7 +432,7 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
     milestones = []
     for label, thr in thresholds.items():
         exp, cons = first_crossing(S, thr), first_crossing(lower, thr)
-        obs = observed_crossing(tests, start, thr)
+        obs = observed_crossing(tests, thr)
         milestones.append({
             "label": label, "threshold": thr,
             "expected": iso(exp), "expected_age_h": hours(exp),
