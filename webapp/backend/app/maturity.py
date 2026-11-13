@@ -94,7 +94,8 @@ from sqlalchemy.engine import Engine
 from .config import BASELINE_HOURS, CALIBRATION_MAX_AGE_DAY, DATUM_TEMP, FIXED_CURVE, FIXED_CURVE_SIGMA, THRESHOLDS
 
 STEP = timedelta(minutes=10)     # 계산 간격: 10분마다 한 번씩 계산 (센서 데이터도 10분 단위로 정리돼 있음)
-HORIZON = timedelta(days=28)     # 타설 후 28일까지 예측 (콘크리트 강도는 보통 28일 강도를 기준으로 본다)
+HORIZON = timedelta(days=30)     # 타설 후 30일까지 계산·그래프 표시 (28일 공시체를 하루쯤 늦게 깨도 보이도록)
+AGE_28 = timedelta(days=28)      # 28일 강도·해체 기준 도달 판단은 28일까지 (콘크리트 강도는 보통 28일 강도를 기준으로 본다)
 Z90 = 1.645                      # 90% 범위를 만들 때 쓰는 통계 상수 (그대로 두면 됨)
 
 
@@ -429,9 +430,10 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
         """시각을 '2026-03-16T14:14:00' 같은 문자열로 (화면에 넘기는 형식)."""
         return None if t is None else pd.Timestamp(t).isoformat()
 
+    within28 = S.index <= start + AGE_28   # 도달 시각은 28일 안에서만 찾는다 (넘으면 '28일 내 미도달')
     milestones = []
     for label, thr in thresholds.items():
-        exp, cons = first_crossing(S, thr), first_crossing(lower, thr)
+        exp, cons = first_crossing(S[within28], thr), first_crossing(lower[within28], thr)
         obs = observed_crossing(tests, thr)
         milestones.append({
             "label": label, "threshold": thr,
@@ -451,7 +453,7 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
     } for t, r in hourly.iterrows()]
 
     # 8) 화면으로 보낼 결과 묶음
-    s28 = float(S.iloc[-1])
+    s28 = float(S.asof(start + AGE_28))
     return {
         "pour_id": pour.id,
         "start": iso(start),
