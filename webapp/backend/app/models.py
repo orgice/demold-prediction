@@ -97,6 +97,10 @@ class Pour(Base):
     member: Mapped[str | None] = mapped_column(String(10))         # 부재 종류: wall(벽·기둥) / slab(슬래브)
     sensors: Mapped[str] = mapped_column(String(500), default="")   # 쉼표 구분 MAC
     note: Mapped[str | None] = mapped_column(Text)
+    notify_emails: Mapped[str | None] = mapped_column(String(500))  # 알림 메일 받을 주소 (쉼표 구분)
+    # 보낸 알림 기록 (JSON): 마지막으로 보낸 시각, 그때의 기준별 예상 시각, 알림 키별 보낸 시각.
+    # 예측이 바뀌었는지, 같은 알림을 이미 보냈는지 판단하는 데 쓴다
+    notice: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # 이 회차의 공시체 결과들 (회차를 지우면 같이 지워짐)

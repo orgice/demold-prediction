@@ -41,10 +41,13 @@ docker compose exec backend python -m scripts.seed /seed/sensors
 LLM_BASE_URL=https://<your-llm-server>/v1
 LLM_API_KEY=...
 LLM_MODEL=...
+EMBED_MODEL=qwen-embedding
 ```
 
-해체 가이드라인 검색을 쓰려면 PDF로 인덱스를 한 번 만듭니다:
+해체 가이드라인 검색은 따로 준비하지 않아도 됩니다. 저장소에 든 팀 요약본 색인(`backend/knowledge/summary_index.json`)을 씁니다.
+더 자세한 답이 필요하면 국토교통부 원문 PDF(국가건설기준센터 www.kcsc.re.kr, 재배포 금지라 저장소에 없음)로 색인을 만듭니다. 만들면 그 색인을 먼저 씁니다.
 `pip install pymupdf && python backend/scripts/build_guideline_index.py "<PDF 경로>"` → `backend/app/data/guideline_chunks.json`
+요약본(`backend/knowledge/removal_summary.md`)을 고쳤으면 `--summary` 로 요약 색인을 다시 만듭니다.
 
 ### 끄기 / 초기화
 

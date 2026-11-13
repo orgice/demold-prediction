@@ -33,6 +33,8 @@ def create_tables():
     # 기존 DB에 나중에 추가된 컬럼 (create_all은 있는 테이블에 컬럼을 더하지 않는다)
     with engine.begin() as c:
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS member VARCHAR(10) NULL"))
+        c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS notify_emails VARCHAR(500) NULL"))
+        c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS notice TEXT NULL"))
 
 
 @app.get("/api/health")

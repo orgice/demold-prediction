@@ -1,9 +1,17 @@
-"""해체 가이드라인 PDF → 검색용 조각(chunk) JSON.  (RAG 인덱싱: Load → Split → Store)
+"""해체 가이드라인 → 검색용 조각(chunk) + 임베딩 벡터 JSON.  (RAG 인덱싱: Load → Split → Embed → Store)
 
-PDF 를 읽는 PyMuPDF 는 백엔드 컨테이너에 없으므로, 분석용 가상환경에서 한 번만 실행한다.
-    pip install pymupdf
-    python webapp/backend/scripts/build_guideline_index.py "<가이드라인 PDF 경로>"
-결과: webapp/backend/app/data/guideline_chunks.json (컨테이너는 이 파일만 읽는다)
+재료는 둘 중 하나다.
+  ① 원문 PDF (권장): 국토교통부 「거푸집 및 동바리 해체 가이드라인」. 재배포 금지라 저장소에 없으며
+     국가건설기준센터(www.kcsc.re.kr)에서 받는다. PDF 를 읽는 PyMuPDF 가 필요하다 (pip install pymupdf).
+  ② 팀 요약본 (PDF 가 없을 때): knowledge/removal_summary.md. 저장소에 들어 있다. 세부 질문에는 원문보다 약하다.
+
+    set -a; . webapp/.env; set +a          # 임베딩 서버 주소·키 (LLM 과 같음)
+    python webapp/backend/scripts/build_guideline_index.py "<가이드라인 PDF 경로>"   # ①
+    python webapp/backend/scripts/build_guideline_index.py --summary                # ②
+결과: ① app/data/guideline_chunks.json (원문 내용이라 저장소에 올리지 않음)
+      ② knowledge/summary_index.json   (팀이 쓴 요약이라 저장소에 올림)
+   검색은 ①이 있으면 ①, 없으면 ②를 쓴다 (app/guideline.py).
+임베딩 서버를 못 쓰면 --no-embed 로 조각만 만든다 (그때 검색은 키워드 검색만 한다).
 """
 from __future__ import annotations
 
@@ -12,12 +20,18 @@ import re
 import sys
 from pathlib import Path
 
-import fitz  # PyMuPDF
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # webapp/backend → app 패키지
+from app import embedding  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
-PDF = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "private_data" / "거푸집 및 동바리 해체 가이드라인.pdf"
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+PDF = Path(ARGS[0]) if ARGS else ROOT / "private_data" / "거푸집 및 동바리 해체 가이드라인.pdf"
 OUT = Path(__file__).resolve().parents[1] / "app" / "data" / "guideline_chunks.json"
+SUMMARY_OUT = Path(__file__).resolve().parents[1] / "knowledge" / "summary_index.json"
 SOURCE = "거푸집 및 동바리 해체 가이드라인 (2023.1)"
+SUMMARY = Path(__file__).resolve().parents[1] / "knowledge" / "removal_summary.md"
+SUMMARY_SOURCE = "해체 기준 요약 (FormCast 팀 정리, 원문: 거푸집 및 동바리 해체 가이드라인)"
+PAGE_REF = re.compile(r"p\.(\d+)(?:[–-](\d+))?")    # 요약본의 '(p.10–11)' 같은 원문 쪽수
 
 CHUNK_SIZE = 700      # 조각 최대 글자 수 (강의 권장 600~900)
 OVERLAP_LINES = 2     # 앞 조각의 마지막 2줄을 다음 조각 앞에 겹쳐 문맥이 끊기지 않게
@@ -63,8 +77,9 @@ def page_lines(page) -> tuple[str | None, list[str]]:
     return page_no, lines
 
 
-def build():
-    """PDF 전체를 절(2.1, 2.1.1 …) 단위로, 길면 700자 안팎으로 잘라 JSON으로 저장한다."""
+def chunks_from_pdf() -> list[dict]:
+    """원문 PDF 를 절(2.1, 2.1.1 …) 단위로, 길면 700자 안팎으로 자른다."""
+    import fitz  # PyMuPDF (요약본만 쓸 때는 필요 없음)
     doc = fitz.open(PDF)
     chunks, buf, chapter, section = [], [], "", ""
     buf_pages: list[str] = []
@@ -98,10 +113,46 @@ def build():
         flush()
     for note in TABLE_NOTES:
         chunks.append({"id": len(chunks), **note})
+    return chunks
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"source": SOURCE, "chunks": chunks}, ensure_ascii=False, indent=1))
-    print(f"{len(chunks)} chunks → {OUT}")
+
+def chunks_from_summary() -> list[dict]:
+    """팀 요약본(Markdown)을 '## 제목' 단위로 자른다. 쪽수는 본문에 적힌 원문 쪽수(p.N)를 모은다."""
+    chunks = []
+    for block in re.split(r"^## ", SUMMARY.read_text(), flags=re.M)[1:]:
+        title, _, body = block.partition("\n")
+        if title.startswith("이 문서에 대하여"):
+            continue
+        pages = set()
+        for a, b in PAGE_REF.findall(body):
+            pages.update(str(n) for n in range(int(a), int(b or a) + 1))
+        chunks.append({"id": len(chunks), "chapter": "해체 기준 요약", "section": title.strip(),
+                       "pages": sorted(pages, key=int), "text": body.strip()})
+    return chunks
+
+
+def build():
+    """조각을 만들고(PDF 또는 요약본) 임베딩 벡터를 붙여 JSON 으로 저장한다."""
+    use_summary = "--summary" in sys.argv
+    chunks = chunks_from_summary() if use_summary else chunks_from_pdf()
+    out = {"source": SUMMARY_SOURCE if use_summary else SOURCE, "chunks": chunks}
+    if "--no-embed" not in sys.argv:
+        # 조각마다 '장·절 제목 + 본문'을 벡터로 바꿔 함께 저장한다 (질문도 같은 모델로 바꿔 비교)
+        vecs = embedding.embed_documents([embed_text(c) for c in chunks])
+        for c, v in zip(chunks, vecs):
+            c["vec"] = [round(x, 5) for x in v]
+        out["embed_model"] = embedding.MODEL
+        print(f"임베딩 {len(vecs)}개 ({embedding.MODEL}, {len(vecs[0])}차원)")
+
+    out_path = SUMMARY_OUT if use_summary else OUT
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(out, ensure_ascii=False))
+    print(f"{len(chunks)} chunks → {out_path}")
+
+
+def embed_text(c: dict) -> str:
+    """임베딩에 넣는 글: 어느 장·절인지도 의미에 포함되게 제목을 앞에 붙인다."""
+    return f"{c['chapter']} {c['section']}\n{c['text']}"
 
 
 if __name__ == "__main__":

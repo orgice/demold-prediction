@@ -6,12 +6,30 @@ pydantic이 요청이 이 모양과 맞는지 자동으로 검사한다 (틀리�
 - ...Patch : 일부만 고칠 때 (보낸 항목만 바뀜)
 DB 테이블 정의는 models.py에 따로 있다.
 """
+import re
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 Member = Literal["wall", "slab"]   # 부재 종류: 벽·기둥 / 슬래브
+EMAIL = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
+
+
+def clean_emails(v: str | None) -> str | None:
+    """'a@x.com; b@y.com' 처럼 쉼표·세미콜론·공백으로 나눈 주소를 검사하고 'a@x.com, b@y.com' 으로 정리한다."""
+    if v is None:
+        return None
+    addrs = list(dict.fromkeys(a for a in re.split(r"[,;\s]+", v) if a))   # 순서 유지, 중복 제거
+    bad = [a for a in addrs if not EMAIL.match(a)]
+    if bad:
+        raise ValueError(f"메일 주소 형식이 아닙니다: {', '.join(bad)}")
+    if len(addrs) > 20:
+        raise ValueError("알림 메일은 20개까지 등록할 수 있습니다.")
+    return ", ".join(addrs) or None
+
+
+Emails = Annotated[str | None, AfterValidator(clean_emails)]
 
 
 class StrengthTestIn(BaseModel):
@@ -44,6 +62,7 @@ class PourIn(BaseModel):
     member: Member | None = None                     # 부재 종류
     sensors: list[str] = []                          # 이 회차에 쓴 센서 MAC 목록
     note: str | None = None
+    notify_emails: Emails = None                     # 알림 메일 받을 주소 (쉼표 구분)
 
 
 class PourPatch(BaseModel):
@@ -56,6 +75,20 @@ class PourPatch(BaseModel):
     member: Member | None = None
     sensors: list[str] | None = None
     note: str | None = None
+    notify_emails: Emails = None
+
+
+class NoticeIn(BaseModel):
+    """알림 메일 초안을 열었음(= 보냄)을 기록. key 는 알림 종류, milestones 는 그때의 기준별 예상 시각."""
+    key: str = Field(max_length=100)
+    milestones: dict[str, datetime | None] = {}      # {"14": "2026-07-05T08:50", ...}
+
+
+class NoticeOut(BaseModel):
+    """보낸 알림 기록. at·milestones 는 마지막으로 보낸 때 기준, sent 는 알림 키별 보낸 시각."""
+    at: datetime
+    milestones: dict[str, datetime | None]
+    sent: dict[str, datetime]
 
 
 class PourOut(BaseModel):
@@ -73,6 +106,8 @@ class PourOut(BaseModel):
     sensors: list[str]
     note: str | None
     test_count: int                                  # 입력된 공시체 시험 수
+    notify_emails: str | None = None
+    notice: NoticeOut | None = None                  # 마지막으로 보낸 알림 (없으면 아직 안 보냄)
 
 
 class SensorOut(BaseModel):
