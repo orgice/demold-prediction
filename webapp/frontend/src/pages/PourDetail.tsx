@@ -6,12 +6,12 @@
 //   설정            SettingsTab    (기본 정보, 연결 센서, CSV 후속 데이터, 제외 구간, 회차 삭제) → PourSettings.tsx
 // 지금 탭은 주소 뒤 ?tab=... 에 기록돼 새로고침해도 유지된다.
 import { useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { api, MEMBER_LABEL, Pour, StrengthTest, StrengthTestIn } from "../api/client";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { api, MEMBER_LABEL, Pour, Prediction, StrengthTest, StrengthTestIn } from "../api/client";
 import { Chart, sensorColor, useChartTheme } from "../components/Chart";
-import { ErrorBox, Info, Loading, MilestoneRow, useAsync } from "../components/common";
+import { ErrorBox, Info, Loading, memberMilestones, MilestoneRow, targetState, useAsync } from "../components/common";
 import { StrengthChart, TempChart, testPoints } from "../components/StrengthChart";
-import { fmtFull, fromInput, toInput } from "../format";
+import { fmtAge, fmtDateTime, fmtFull, fromInput, toInput } from "../format";
 import SettingsTab from "./PourSettings";
 
 type Tab = "predict" | "pourtime" | "tests" | "settings";
@@ -44,13 +44,15 @@ export default function PourDetail() {
             {" "}· 센서 {p.sensors.join(", ")}
           </div>
         </div>
+        {/* 선택 회차를 AI 상담으로 넘긴다 (DESIGN.md 12.5) */}
+        <Link to={`/assistant?pour=${p.id}`} className="btn">이 타설에 질문하기</Link>
       </div>
       <div className="tabs">
         {TABS.map(([k, label]) => (
           <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
-      {tab === "predict" && <PredictionTab pour={p} version={version} />}
+      {tab === "predict" && <PredictionTab pour={p} version={version} onTab={setTab} />}
       {tab === "pourtime" && <PourTimeTab pour={p} onSaved={changed} />}
       {tab === "tests" && <TestsTab pour={p} onSaved={changed} />}
       {tab === "settings" && <SettingsTab pour={p} onSaved={changed} />}
@@ -59,8 +61,8 @@ export default function PourDetail() {
 }
 
 // ---------------- 강도 예측 ----------------
-/** 강도 예측 탭: KPI 3개(현재 강도·28일 강도·보정) → 예측 곡선과 해체 시각 → 내부온도 → 모델 정보 */
-function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
+/** 강도 예측 탭: 목표 도달 요약 → KPI(현재·28일) → 예측 곡선과 해체 시각 → 내부온도 → 모델 정보 (DESIGN.md 12.2) */
+function PredictionTab({ pour, version, onTab }: { pour: Pour; version: number; onTab: (t: Tab) => void }) {
   const latest = useAsync(() => api.prediction(pour.id), [pour.id, version]);
   if (latest.error) return <ErrorBox error={latest.error} />;
   const pred = latest.data;
@@ -68,6 +70,7 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
 
   return (
     <>
+      <TargetSummary pour={pour} pred={pred} onTab={onTab} />
       <div className="grid kpis">
         <div className="kpi">
           <div className="label">현재 예측 강도</div>
@@ -81,15 +84,6 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
             {pred.design_ratio_28d != null
               ? <>설계강도 대비 {(pred.design_ratio_28d * 100).toFixed(0)}%{pred.design_ratio_28d < 1 && <span className="text-warn"> · 양생 관리 필요</span>}</>
               : "설계강도 미입력 (설정 탭)"}
-          </div>
-        </div>
-        <div className="kpi">
-          <div className="label">보정</div>
-          <div className="value">{pred.model.calibrated ? `×${pred.model.calibration_scale.toFixed(2)}` : "없음"}</div>
-          <div className="sub">
-            {pred.model.calibrated
-              ? `현장양생 시험 ${testPoints(pred, true).length}회로 이 회차 보정`
-              : "공시체 결과 입력 시 정확도 향상"}
           </div>
         </div>
       </div>
@@ -129,8 +123,64 @@ function PredictionTab({ pour, version }: { pour: Pour; version: number }) {
           곡선 Su={pred.model.params.Su} MPa, k={pred.model.params.k}, M0={pred.model.params.M0} ℃·일 ·
           σ={pred.model.sigma} · {pred.model.forecast}
         </div>
+        <div className="muted" style={{ marginTop: 4 }}>
+          보정 배율 {pred.model.calibrated ? `×${pred.model.calibration_scale.toFixed(2)} (현장양생 시험 ${testPoints(pred, true).length}회)` : "없음"}
+        </div>
       </details>
     </>
+  );
+}
+
+/** 상단 요약: 현재 상태 · 해당 부재 목표 시각(예상·보수적) · 보정 · 데이터 기준 시각. 입력이 필요하면 해당 탭으로 */
+function TargetSummary({ pour, pred, onTab }: { pour: Pour; pred: Prediction; onTab: (t: Tab) => void }) {
+  const targets = memberMilestones(pour.member, pred.milestones);
+  const calibTests = testPoints(pred, true).length;
+  return (
+    <section className="card target-summary" aria-label="목표 도달 요약">
+      <div className="ts-main">
+        {targets.length === 0 ? (
+          <>
+            <div className="ts-label">현재 상태</div>
+            <div className="ts-title">부재 미설정</div>
+            <div className="small muted">부재(벽·기둥 / 슬래브)를 정하면 해당 해체 기준의 도달 예상 시각을 여기에 보여 줍니다.</div>
+            <div><button className="btn sm" onClick={() => onTab("settings")}>부재 설정하기</button></div>
+          </>
+        ) : targets.map((m) => {
+          const st = targetState(m);
+          return (
+            <div key={m.label} className="ts-target">
+              <div className="ts-label">{m.label}</div>
+              <div className="ts-title">
+                <span className={`badge ${st.cls}`}>{st.text}</span>
+              </div>
+              {m.expected && !m.reached_at_as_of && (
+                <div className="ts-times">
+                  <div><span className="tiny">예상</span><b>{fmtDateTime(m.expected)}</b><span className="tiny">타설 후 {fmtAge(m.expected_age_h)}</span></div>
+                  <div><span className="tiny">보수적 (90% 하한)</span><b>{fmtDateTime(m.conservative)}</b><span className="tiny">타설 후 {fmtAge(m.conservative_age_h)}</span></div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="ts-side">
+        <div className="ts-row">
+          <span className="tiny">보정</span>
+          {pred.model.calibrated
+            ? <span><span className="badge good">공시체 결과 반영됨</span> <span className="tiny">{calibTests}회</span></span>
+            : <span><span className="badge neutral">공시체 미입력</span> <button className="btn sm" onClick={() => onTab("tests")}>입력</button></span>}
+        </div>
+        <div className="ts-row">
+          <span className="tiny">타설 시각</span>
+          {pour.pour_start
+            ? <span className="badge good">확정</span>
+            : <span><span className="badge warn">미확정</span> <button className="btn sm" onClick={() => onTab("pourtime")}>확인</button></span>}
+        </div>
+        <div className="ts-row"><span className="tiny">예측 계산 기준</span><span className="small">{fmtDateTime(pred.as_of)}</span></div>
+        <div className="ts-row"><span className="tiny">마지막 센서 데이터</span><span className="small">{fmtDateTime(pred.data_end)}</span></div>
+      </div>
+      <div className="tiny ts-note">예측 기준 도달은 현장 해체 승인이 아닙니다. 해체 승인은 현장 시공 측이 합니다.</div>
+    </section>
   );
 }
 

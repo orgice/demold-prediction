@@ -2,8 +2,9 @@
 // 질문을 보내면 서버의 AI(backend/app/agent.py)가 예측 도구를 불러 답한다.
 // 대화는 이 화면에만 있고 저장되지 않는다 (새로고침하면 사라짐).
 import { useEffect, useRef, useState } from "react";
-import { AgentStep, api, ChatMessage } from "../api/client";
-import { Info } from "../components/common";
+import { Link, useSearchParams } from "react-router-dom";
+import { AgentStep, api, ChatMessage, MEMBER_LABEL } from "../api/client";
+import { Info, useAsync } from "../components/common";
 
 /** 말풍선 하나: 질문 또는 답변 (+ AI가 부른 도구 목록, 걸린 시간, 오류 여부) */
 interface Turn extends ChatMessage { steps?: AgentStep[]; elapsed_ms?: number; error?: boolean }
@@ -34,6 +35,15 @@ export default function Assistant() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
+  // 타설 상세의 ‘이 타설에 질문하기’로 오면 ?pour=3 이 붙는다.
+  // AI API는 회차 ID를 따로 받지 않으므로, 회차 이름을 질문 문장에 넣어 대상을 전달한다.
+  const [params, setParams] = useSearchParams();
+  const pourId = params.get("pour") ? Number(params.get("pour")) : null;
+  const target = useAsync(() => (pourId ? api.pour(pourId) : Promise.resolve(null)), [pourId]);
+  const tp = target.data;
+  const examples = tp
+    ? [`${tp.name} 목표 강도 도달 예상은?`, `${tp.name} 공시체 결과가 반영됐나요?`, `${tp.name} 예측의 근거를 설명해 줘`]
+    : EXAMPLES;
 
   // 중괄호 필수: scrollIntoView 가 값을 돌려주는 브라우저에서 React 가 그 값을 정리 함수로 실행하다 죽는다
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [turns, busy]);
@@ -69,27 +79,40 @@ export default function Assistant() {
         {turns.length > 0 && <button className="btn" onClick={() => setTurns([])} disabled={busy}>새 대화</button>}
       </div>
 
+      {pourId && (
+        <div className="chat-target">
+          <span className="tiny">질문 대상</span>
+          {tp ? <Link to={`/pours/${tp.id}`} className="pour-link">{tp.name}{tp.member ? ` · ${MEMBER_LABEL[tp.member]}` : ""}{tp.site ? ` · ${tp.site}` : ""}</Link>
+            : target.error ? <span className="small">회차를 찾지 못했어요</span> : <span className="small muted">불러오는 중…</span>}
+          <span className="tiny">질문에 회차 이름을 넣어 보내요</span>
+          <button className="btn sm" onClick={() => setParams({}, { replace: true })}>대상 해제</button>
+        </div>
+      )}
+
       <div className="card chat-log">
         {turns.length === 0 && (
           <div className="chat-empty">
             <div className="muted small">이런 질문을 해 보세요</div>
             <div className="chips">
-              {EXAMPLES.map((q) => <button key={q} className="chip" onClick={() => send(q)}>{q}</button>)}
+              {examples.map((q) => <button key={q} className="chip" onClick={() => send(q)}>{q}</button>)}
             </div>
           </div>
         )}
         {turns.map((t, i) => (
           <div key={i} className={`bubble-row ${t.role}`}>
             <div className={`bubble ${t.role} ${t.error ? "error" : ""}`}>
-              {t.steps && t.steps.length > 0 && (
-                <div className="steps">
-                  {t.steps.map((s, j) => (
+              <div className="bubble-text">{t.content}</div>
+              {/* 도구 호출·소요 시간 같은 기술 정보는 접어 둔다 (DESIGN.md 12.5) */}
+              {((t.steps && t.steps.length > 0) || t.elapsed_ms != null) && (
+                <details className="steps">
+                  <summary className="tiny">
+                    근거 보기{t.steps?.length ? ` · 예측 도구 ${t.steps.length}회` : ""}{t.elapsed_ms != null ? ` · ${(t.elapsed_ms / 1000).toFixed(1)}초` : ""}
+                  </summary>
+                  {t.steps?.map((s, j) => (
                     <div key={j} className="tiny">{s.ok ? "✓" : "✗"} {stepText(s)}</div>
                   ))}
-                </div>
+                </details>
               )}
-              <div className="bubble-text">{t.content}</div>
-              {t.elapsed_ms != null && <div className="tiny">{(t.elapsed_ms / 1000).toFixed(1)}초</div>}
             </div>
           </div>
         ))}
@@ -102,7 +125,7 @@ export default function Assistant() {
       </div>
 
       <form className="chat-input" onSubmit={(e) => { e.preventDefault(); send(input); }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="예: 4회차 슬래브 해체 언제 가능해?"
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={tp ? `예: ${tp.name} 해체 언제 가능해?` : "예: 4회차 슬래브 해체 언제 가능해?"}
           maxLength={1000} disabled={busy} />
         <button className="btn primary" type="submit" disabled={busy || !input.trim()}>보내기</button>
       </form>

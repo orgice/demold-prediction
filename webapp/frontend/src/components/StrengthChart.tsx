@@ -10,7 +10,7 @@ import { Chart, useChartTheme } from "./Chart";
 export const LINE = {
   initial: "#666666",   // 최초 예측 (점선)
   observed: "#0FB3A3",  // 실측(관측 온도) 기반 추정 — teal
-  forecast: "#F4800B",  // 가정 온도 기반 이후 예측 — orange
+  forecast: "#F4800B",  // 가정 온도 기반 이후 예측 — orange 점선
   target: "#915CE0",    // 목표 강도 (5·14 MPa·설계강도) — purple
 };
 
@@ -118,7 +118,8 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
             position: "end", color: th.strong, fontSize: 11, align: nowX > 14 ? "right" : "left" },
           data: [{ xAxis: nowX }] } },
       { name: "수정 예측", type: "line", symbol: "none", data: fut.map((s) => [day(s.age_h), s.strength]),
-        lineStyle: { width: 2.5, color: LINE.forecast }, itemStyle: { color: LINE.forecast }, z: 2,
+        // 가정 온도 기반 예측은 점선 (DESIGN.md 7장: 관측 구간과 색 + 선 종류로 구분)
+        lineStyle: { width: 2.5, type: [6, 4], color: LINE.forecast }, itemStyle: { color: LINE.forecast }, z: 2,
         endLabel: compact ? undefined : { show: true, formatter: `${f1(pred.strength_28d)} MPa`, color: LINE.forecast, fontWeight: 700 } },
       ...(pred.baseline ? [{
         name: "최초 예측", type: "line", symbol: "none", z: 1,

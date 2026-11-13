@@ -114,9 +114,18 @@ export default function Dashboard() {
   return (
     <main className="page">
       <DashHead demo={demo} bell={bell} count={alerts.unsent} onBell={() => setBell((b) => !b)}
-        onExitDemo={() => { setDemo(false); setPreds({}); setMainSel(null); setPrev([]); }} />
+        onExitDemo={() => { setDemo(false); setPreds({}); setMainSel(null); setPrev([]); }}
+        onCreate={sorted.length > 0 && !demo ? () => setCreating(true) : undefined} />
       {bell && <AlertPanel alerts={alerts} demo={demo}
         onSent={(p) => pours.setData((xs) => xs?.map((x) => (x.id === p.id ? p : x)) ?? xs)} />}
+      {/* 아직 메일 초안을 열지 않은 알림이 있으면 종을 열지 않아도 본문 상단에 한 줄 요약 (DESIGN.md 8장 5) */}
+      {!bell && alerts.unsent > 0 && (
+        <div className="alert warn alert-inline">
+          <span><span className="ico" aria-hidden="true">⚠</span> 선택한 회차에 확인할 강도 알림 {alerts.unsent}건이 있어요.</span>
+          <button className="btn sm" onClick={() => setBell(true)}>알림 보기</button>
+        </div>
+      )}
+      {!demo && <CheckList pours={active} />}
 
       {sorted.length === 0 ? (
         <div className="card empty">
@@ -130,7 +139,7 @@ export default function Dashboard() {
       ) : (
         <>
           <Banner active={active} sorted={sorted} mainIds={mainIds} mainSel={mainSel} onPick={setMainSel}
-            demo={demo} onCreate={() => setCreating(true)} />
+            demo={demo} />
           <div className="dash-controls">
             <PrevPicker previous={previous} picked={prevIds} onChange={setPrev} />
             <span className="small muted sel-names">
@@ -153,8 +162,8 @@ export default function Dashboard() {
 }
 
 // ---------------- 머리말 · 배너 ----------------
-function DashHead({ demo, bell, count, onBell, onExitDemo }: {
-  demo: boolean; bell: boolean; count: number; onBell: () => void; onExitDemo?: () => void;
+function DashHead({ demo, bell, count, onBell, onExitDemo, onCreate }: {
+  demo: boolean; bell: boolean; count: number; onBell: () => void; onExitDemo?: () => void; onCreate?: () => void;
 }) {
   return (
     <>
@@ -169,6 +178,8 @@ function DashHead({ demo, bell, count, onBell, onExitDemo }: {
           {count > 0 && <span className="dot-count">{count}</span>}
         </button>
       </div>
+      {/* 대시보드의 주 행동은 ‘새 타설 등록’ 하나 (DESIGN.md 8장 1) */}
+      {onCreate && <button className="btn primary" onClick={onCreate}>+ 새 타설 등록</button>}
     </div>
     {demo && (
       <div className="demo-band" role="status">
@@ -180,9 +191,9 @@ function DashHead({ demo, bell, count, onBell, onExitDemo }: {
   );
 }
 
-function Banner({ active, sorted, mainIds, mainSel, onPick, demo, onCreate }: {
+function Banner({ active, sorted, mainIds, mainSel, onPick, demo }: {
   active: Pour[]; sorted: Pour[]; mainIds: number[]; mainSel: number | "all" | null;
-  onPick: (v: number | "all") => void; demo: boolean; onCreate: () => void;
+  onPick: (v: number | "all") => void; demo: boolean;
 }) {
   const main = sorted.find((p) => p.id === mainIds[0]);
   const options = active.length > 0 ? active : sorted;
@@ -217,9 +228,34 @@ function Banner({ active, sorted, mainIds, mainSel, onPick, demo, onCreate }: {
         {active.length === 0 && !demo && (
           <div className="row">
             <Link to="/pours" className="btn sm">타설 이력</Link>
-            <button className="btn sm" onClick={onCreate}>+ 새 타설 등록</button>
           </div>
         )}
+      </div>
+    </section>
+  );
+}
+
+// ---------------- 확인 필요 ----------------
+/** 진행 중 회차의 빠진 입력을 모아 해당 입력 탭으로 바로 보낸다 (DESIGN.md 12.1) */
+function CheckList({ pours }: { pours: Pour[] }) {
+  const items = pours.flatMap((p) => [
+    !p.pour_start && { pour: p, text: "타설 시각 미확정", tab: "pourtime", action: "타설 시점 확인" },
+    p.test_count === 0 && { pour: p, text: "공시체 미입력", tab: "tests", action: "공시체 결과 입력" },
+    !p.member && { pour: p, text: "부재 미설정", tab: "settings", action: "부재 설정" },
+  ].filter((x): x is { pour: Pour; text: string; tab: string; action: string } => !!x));
+  if (items.length === 0) return null;
+  return (
+    <section className="card" aria-label="확인 필요">
+      <div className="card-head"><h3>확인 필요 <span className="badge warn">{items.length}</span></h3>
+        <span className="tiny">진행 중 회차 기준 · 입력하면 예측이 다시 계산됩니다</span></div>
+      <div className="check-list">
+        {items.map((it) => (
+          <div key={`${it.pour.id}-${it.tab}`} className="check-row">
+            <span className="check-name">{title(it.pour)}</span>
+            <span className="badge warn">{it.text}</span>
+            <Link to={`/pours/${it.pour.id}?tab=${it.tab}`} className="btn sm">{it.action}</Link>
+          </div>
+        ))}
       </div>
     </section>
   );

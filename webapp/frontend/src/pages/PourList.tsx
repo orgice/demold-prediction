@@ -2,7 +2,7 @@
 // 회차마다 카드 한 장: 현재 예측 강도, 해체 기준별 예상 시각, 28일 강도. 카드를 누르면 회차 상세로.
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, MEMBER_LABEL } from "../api/client";
+import { api, Member, MEMBER_LABEL } from "../api/client";
 import { ErrorBox, Loading, MilestoneBadge, useAsync } from "../components/common";
 import NewPourModal, { pourUrl } from "../components/NewPourModal";
 import { fmtAge, fmtDateTime, fmtFull } from "../format";
@@ -11,6 +11,13 @@ export default function PourList() {
   const { data, error, loading } = useAsync(api.summary, []);   // 회차별 예측 요약
   const [creating, setCreating] = useState(false);              // 새 타설 등록 창이 열려 있는지
   const nav = useNavigate();
+  // 회차 이름 검색 + 부재 필터 (DESIGN.md 12.3)
+  const [q, setQ] = useState("");
+  const [member, setMember] = useState<Member | "none" | "all">("all");
+  const shown = (data ?? []).filter(({ pour }) =>
+    `${pour.name} ${pour.site ?? ""}`.toLowerCase().includes(q.trim().toLowerCase())
+    && (member === "all" || (member === "none" ? !pour.member : pour.member === member)));
+  const filtered = q.trim() !== "" || member !== "all";
 
   return (
     <main className="page">
@@ -24,8 +31,21 @@ export default function PourList() {
       <ErrorBox error={error} />
       {loading && <Loading text="예측 계산 중…" />}
       {data?.length === 0 && <div className="alert info">등록된 회차가 없습니다. ‘새 타설 등록’으로 시작하세요.</div>}
+      {!!data?.length && (
+        <div className="list-filters">
+          <input type="search" placeholder="회차명·현장 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="회차명·현장 검색" />
+          <div className="seg" role="group" aria-label="부재 필터">
+            {([["all", "전체"], ["wall", MEMBER_LABEL.wall], ["slab", MEMBER_LABEL.slab], ["none", "부재 미설정"]] as const).map(([k, label]) => (
+              <button key={k} className={member === k ? "on" : ""} aria-pressed={member === k} onClick={() => setMember(k)}>{label}</button>
+            ))}
+          </div>
+          <span className="tiny">{filtered ? `${shown.length} / ${data.length}개` : `${data.length}개`}</span>
+          {filtered && <button className="btn sm" onClick={() => { setQ(""); setMember("all"); }}>조건 해제</button>}
+        </div>
+      )}
+      {filtered && shown.length === 0 && <div className="muted small">조건에 맞는 회차가 없어요.</div>}
       <div className="grid cols-3">
-        {data?.map(({ pour, error, current_strength, strength_28d, milestones, as_of, design_ratio_28d }) => (
+        {shown.map(({ pour, error, current_strength, strength_28d, milestones, as_of, design_ratio_28d }) => (
           <Link key={pour.id} to={`/pours/${pour.id}`} className="card pour-card">
             <div className="card-head">
               <div>
