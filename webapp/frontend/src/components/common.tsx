@@ -1,6 +1,6 @@
 // 여러 화면에서 같이 쓰는 작은 부품들 (데이터 불러오기, 오류·로딩 표시, 창, 해체 시각 표시).
 import { DependencyList, ReactNode, useCallback, useEffect, useState } from "react";
-import type { Milestone } from "../api/client";
+import type { Member, Milestone } from "../api/client";
 import { fmtAge, fmtDateTime } from "../format";
 
 /**
@@ -46,11 +46,24 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
-/** 도달 상태 배지: 상태 색 + 글자 (색만으로 구분하지 않음) */
+/** 도달 상태 배지: 상태 색 + 글자 (색만으로 구분하지 않음). ‘예측 기준 도달’은 해체 승인 완료가 아니다 (DESIGN.md 1.3) */
 export function MilestoneBadge({ m }: { m: Milestone }) {
-  if (m.reached_at_as_of) return <span className="badge good">✓ 도달</span>;
+  if (m.reached_at_as_of) return <span className="badge good">✓ 예측 기준 도달</span>;
   if (!m.expected) return <span className="badge bad">28일 내 미도달 예상</span>;
-  return <span className="badge warn">⏳ 예정</span>;
+  return <span className="badge warn">⏳ 미도달</span>;
+}
+
+/** 부재 종류에 맞는 해체 기준만 고른다 (벽·기둥 5 MPa, 슬래브 14 MPa). 부재 미설정이면 빈 목록 */
+export function memberMilestones(member: Member | null, ms: Milestone[]) {
+  const t = member === "wall" ? 5 : member === "slab" ? 14 : null;
+  return t == null ? [] : ms.filter((m) => m.threshold === t);
+}
+
+/** 목표 도달 상태 문구 (DESIGN.md 12.2: 구체적인 상태, 승인과 구분) */
+export function targetState(m: Milestone): { cls: "good" | "warn" | "bad"; text: string } {
+  if (m.reached_at_as_of) return { cls: "good", text: "예측 기준 도달" };
+  if (!m.expected) return { cls: "bad", text: "28일 내 미도달 예상" };
+  return { cls: "warn", text: "예측 기준 미도달" };
 }
 
 /** 최초 예상 대비 늦어짐(+)/빨라짐(−) */
