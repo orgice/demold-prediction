@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, MEMBER_LABEL, Pour, Prediction } from "../api/client";
-import { ErrorBox, Loading, MilestoneRow, useAsync } from "../components/common";
+import { ErrorBox, Info, Loading, MilestoneRow, useAsync } from "../components/common";
 import { demoData } from "../components/demo";
 import NewPourModal, { pourUrl } from "../components/NewPourModal";
 import {
@@ -97,7 +97,7 @@ export default function Dashboard() {
         <div className="card empty">
           <h2>대시보드를 불러오지 못했습니다</h2>
           <ErrorBox error={pours.error} />
-          <div className="actions" style={{ justifyContent: "center" }}>
+          <div className="actions center">
             <button className="btn primary" onClick={retry}>다시 시도</button>
             <button className="btn" onClick={() => setDemo(true)}>예시 화면 보기</button>
           </div>
@@ -129,7 +129,7 @@ export default function Dashboard() {
         <div className="card empty">
           <h2>등록된 타설 회차가 없습니다</h2>
           <div className="muted small">새 타설을 등록하면 강도 예측과 기준 강도 도달 시점이 여기에 표시됩니다.</div>
-          <div className="actions" style={{ justifyContent: "center" }}>
+          <div className="actions center">
             <button className="btn primary" onClick={() => setCreating(true)}>+ 새 타설 등록</button>
             <Link to="/pours" className="btn">타설 이력</Link>
           </div>
@@ -166,7 +166,7 @@ function DashHead({ demo, bell, count, onBell, onExitDemo, onCreate }: {
   return (
     <>
     <div className="page-head">
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="row nowrap">
         <h1>시험 강도 대시보드</h1>
         <button className={`icon-btn ${bell ? "on" : ""}`} onClick={onBell} aria-expanded={bell}
           aria-label={`강도 알림${count ? ` ${count}건` : ""}`} title="강도 알림">
@@ -199,7 +199,7 @@ function Banner({ active, sorted, mainIds, mainSel, onPick, demo }: {
   const elapsed = (p: Pour) => fmtAge(hoursBetween(startOf(p)!, nowIso()));
   return (
     <section className="banner">
-      <div style={{ minWidth: 0 }}>
+      <div className="grow">
         <div className="banner-label">
           {demo ? "예시 데이터 · " : ""}
           {active.length > 0 ? `진행 중인 시험 ${active.length}건` : "진행 중인 시험 없음"}
@@ -210,7 +210,8 @@ function Banner({ active, sorted, mainIds, mainSel, onPick, demo }: {
         </div>
         {active.length === 0 && (
           <div className="banner-sub">
-            지금은 가장 최근 회차를 보여 줍니다. 협력사 DB 연동 후에는 실시간으로 수집되는 회차가 진행 중으로 표시됩니다.
+            가장 최근 회차를 보여 줍니다
+            <Info align="right">협력사 DB 연동 후에는 실시간으로 수집되는 회차(타설 후 28일 이내)가 진행 중으로 표시됩니다.</Info>
           </div>
         )}
       </div>
@@ -223,7 +224,7 @@ function Banner({ active, sorted, mainIds, mainSel, onPick, demo }: {
           {active.length > 1 && <option value="all">진행 중 전체 비교</option>}
         </select>
         {active.length === 0 && !demo && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div className="row">
             <Link to="/pours" className="btn sm">타설 이력</Link>
           </div>
         )}
@@ -273,11 +274,11 @@ function PrevPicker({ previous, picked, onChange }: { previous: Pour[]; picked: 
       {open && (
         <div className="picker-pop">
           <input placeholder="회차명 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="회차명 검색" />
-          <div style={{ display: "flex", gap: 6 }}>
+          <div className="row">
             <button className="btn sm" onClick={() => onChange(previous.slice(0, MAX_PREV).map((p) => p.id))}>전체 선택</button>
             <button className="btn sm" onClick={() => onChange([])}>선택 해제</button>
           </div>
-          {previous.length > MAX_PREV && <div className="tiny">최대 {MAX_PREV}개까지 비교합니다. 전체 선택은 최근 {MAX_PREV}개를 고릅니다.</div>}
+          {previous.length > MAX_PREV && <div className="tiny">최대 {MAX_PREV}개 (전체 선택 = 최근 {MAX_PREV}개)</div>}
           <div className="picker-list">
             {shown.map((p) => (
               <label key={p.id} className={`picker-item ${!picked.includes(p.id) && full ? "disabled" : ""}`}>
@@ -319,7 +320,9 @@ function Kpis({ pred, compact = false }: { pred: Prediction; compact?: boolean }
       <div className="kpi">
         <div className="label">28일 예측{compact ? "" : " 강도"}</div>
         <div className="value">{pred.strength_28d.toFixed(1)}<span className="unit">MPa</span></div>
-        {!compact && <div className="sub">{ratio != null ? `설계강도 대비 ${(ratio * 100).toFixed(0)}%${ratio < 1 ? " — 양생 관리 필요" : ""}` : "설계강도 미입력"}</div>}
+        {!compact && <div className="sub">{ratio != null
+          ? <>설계강도 대비 {(ratio * 100).toFixed(0)}%{ratio < 1 && <span className="text-warn"> · 양생 관리 필요</span>}</>
+          : "설계강도 미입력"}</div>}
       </div>
       {!compact && (
         <div className="kpi">
@@ -336,14 +339,15 @@ function Kpis({ pred, compact = false }: { pred: Prediction; compact?: boolean }
 function Milestones({ pred, open }: { pred: Prediction; open: boolean }) {
   if (!open) return null;
   return (
-    <div>
-      <h3 style={{ margin: "4px 0 8px" }}>기준 강도 도달 예상 시점</h3>
+    <div className="stack tight">
+      <h3>기준 강도 도달 예상 시점
+        <Info align="right">예상 = 중앙 예측, 보수적 = 90% 하한이 기준에 닿는 시각입니다. 실제 해체 승인 시각이 아닙니다.</Info>
+      </h3>
       <div className="milestones">
         {pred.milestones.map((m) => (
           <MilestoneRow key={m.label} m={m} baseAgeH={pred.baseline?.milestones.find((b) => b.label === m.label)?.expected_age_h} />
         ))}
       </div>
-      <div className="tiny" style={{ marginTop: 6 }}>예상 = 중앙 예측, 보수적 = 90% 하한이 기준에 닿는 시각. 실제 해체 승인 시각이 아닙니다.</div>
     </div>
   );
 }
@@ -383,7 +387,7 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
     const it = items[0];
     const pred = it.state.data;
     return (
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="card stack loose">
         <SummaryHead item={it} demo={demo} open={!!open[it.pour.id]} onToggle={() => toggle(it.pour.id)} />
         {pred ? (
           <>
@@ -394,9 +398,8 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
               <StrengthChart pred={pred} design={it.pour.design_strength} />
             </div>
             <div>
-              <h3>콘크리트 내부온도</h3>
+              <h3>콘크리트 내부온도<Info align="right">점선은 직전 24시간 온도 패턴이 반복된다고 가정한 값입니다.</Info></h3>
               <TempChart pred={pred} />
-              <div className="tiny">점선은 직전 24시간 온도 패턴이 반복된다고 가정한 값입니다.</div>
             </div>
           </>
         ) : <PredFallback state={it.state} />}
@@ -409,7 +412,7 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
     .map((i) => ({ pred: i.state.data!, name: i.pour.name, color: colorOf(i.pour.id) }));
   const designs = [...new Set(items.map((i) => i.pour.design_strength).filter((d): d is number => d != null))];
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="card stack loose">
       <div className="sum-grid">
         {items.map((it) => (
           <div key={it.pour.id} className="sum-cell">
@@ -421,17 +424,12 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
         ))}
       </div>
       <div>
-        <div className="card-head" style={{ marginBottom: 0 }}>
-          <h3>압축강도 예측 비교</h3>
-          <span className="tiny">진한 선 실측 · 옅은 점선 예측 · 점 공시체</span>
-        </div>
+        <h3>압축강도 예측 비교<Info align="right">회차별 진한 선은 실측 온도로 계산한 강도, 옅은 점선은 예측, 점은 공시체 시험 결과입니다.</Info></h3>
         {ready.length > 0 ? <CompareStrengthChart items={ready} design={designs.length === 1 ? designs[0] : null} /> : <Loading text="예측 계산 중…" />}
       </div>
       {ready.length > 0 && (
         <div>
-          <div className="card-head" style={{ marginBottom: 0 }}>
-            <h3>콘크리트 내부온도</h3><span className="tiny">회차별 관측 온도 · 예측 없음</span>
-          </div>
+          <h3>콘크리트 내부온도<Info align="right">회차별 관측 온도만 그립니다 (예측 없음).</Info></h3>
           <CompareTempChart items={ready} />
         </div>
       )}
@@ -451,7 +449,7 @@ function Separate({ items, colorOf, demo }: { items: Item[]; colorOf: (id: numbe
       {items.map((it) => {
         const pred = it.state.data;
         return (
-          <div key={it.pour.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div key={it.pour.id} className="card stack">
             <SummaryHead item={it} color={colorOf(it.pour.id)} demo={demo} open={!!open[it.pour.id]}
               onToggle={() => setOpen((o) => ({ ...o, [it.pour.id]: !o[it.pour.id] }))} />
             {pred ? (
@@ -521,11 +519,11 @@ function mailto(a: AlertItem) {
 
 function AlertPanel({ alerts }: { alerts: Alerts }) {
   return (
-    <section className="card" aria-label="강도 알림">
-      <h3 style={{ marginBottom: 10 }}>강도 알림</h3>
+    <section className="card stack" aria-label="강도 알림">
+      <h3>강도 알림<Info align="right">메일 초안 열기는 기본 메일 앱에 초안만 엽니다. 수신자 확인과 발송은 직접 합니다.</Info></h3>
       {alerts.selected === 0 && <div className="muted small">선택한 회차가 없습니다.</div>}
       {alerts.failed.length > 0 && (
-        <div className="alert error small" style={{ marginBottom: 8 }}>
+        <div className="alert error small">
           예측 조회 실패: {alerts.failed.map((p) => p.name).join(", ")}. 이 회차는 경고 여부를 판단하지 못했습니다.
         </div>
       )}
@@ -541,7 +539,6 @@ function AlertPanel({ alerts }: { alerts: Alerts }) {
           </div>
         ))}
       </div>
-      {alerts.list.length > 0 && <div className="tiny" style={{ marginTop: 8 }}>메일 초안 열기는 기본 메일 앱에 초안만 엽니다. 수신자 확인과 발송은 직접 합니다.</div>}
     </section>
   );
 }

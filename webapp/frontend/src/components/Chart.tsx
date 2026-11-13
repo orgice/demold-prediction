@@ -53,7 +53,7 @@ export function Chart({ option, height = 320 }: { option: Record<string, unknown
     Array.isArray(a) ? a.map((x) => ({ ...axis, ...x })) : a ? { ...axis, ...(a as object) } : a;
   const base = {
     backgroundColor: "transparent",
-    textStyle: { fontFamily: "inherit", color: th.text },
+    textStyle: { fontFamily: "\"Pretendard Variable\", Pretendard, \"Apple SD Gothic Neo\", \"Malgun Gothic\", sans-serif", color: th.text },
     grid: { left: 52, right: 20, top: 36, bottom: 56 },
     ...option,
     // 툴팁: 흰 면 · 모서리 8px · ev-3 그림자 · 테두리 없음

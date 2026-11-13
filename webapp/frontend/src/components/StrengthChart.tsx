@@ -45,6 +45,22 @@ export function isComplete(pred: Prediction) {
   return hoursBetween(pred.start, pred.data_end) >= 28 * 24 - 1;
 }
 
+/** 범례에 커서를 올리면 나오는 설명 */
+const LEGEND_HELP: Record<string, string> = {
+  "최초 예측": "타설 후 24시간까지의 데이터로 했던 예측입니다. 지금 예측과 비교해 도달이 늦어졌는지 빨라졌는지 봅니다.",
+  "실측 기반 추정": "센서가 실제로 잰 내부온도로 계산한 강도입니다. 마지막 데이터 시점까지 그립니다.",
+  "수정 예측": "마지막 데이터 이후의 예측입니다. 직전 24시간 온도가 반복된다고 가정하고, 공시체 결과가 있으면 보정해 이어 그립니다.",
+  "목표 강도": "벽·기둥 측면 해체 5 MPa, 슬래브 밑면 해체 14 MPa, 그리고 입력한 설계기준강도입니다.",
+  "공시체": "현장에서 깬 압축강도 시험 1회의 평균값입니다. 예측이 맞는지 확인하는 실측점입니다.",
+  "관측": "센서가 실제로 잰 콘크리트 내부온도입니다.",
+  "가정": "마지막 데이터 이후 온도입니다. 직전 24시간 패턴이 반복된다고 가정했습니다.",
+};
+const legendTip = {
+  show: true,
+  formatter: (p: { name: string }) =>
+    LEGEND_HELP[p.name] ? `<b>${p.name}</b><br/><span style="display:inline-block;max-width:260px;white-space:normal">${LEGEND_HELP[p.name]}</span>` : p.name,
+};
+
 /** 목표 강도 가로선: 벽체 5, 슬래브 14, 설계강도 */
 function targetLines(design: number | null | undefined) {
   return [5, 14, ...(design ? [design] : [])].map((v) => ({ yAxis: v, name: `${v} MPa` }));
@@ -78,7 +94,7 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
         ].join("<br/>");
       },
     },
-    legend: { show: !compact, data: ["최초 예측", "실측 기반 추정", "수정 예측", "목표 강도", "공시체"] },
+    legend: { show: !compact, data: ["최초 예측", "실측 기반 추정", "수정 예측", "목표 강도", "공시체"], tooltip: legendTip },
     xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: 28, interval: 7 },
     yAxis: { type: "value", name: "MPa", min: 0, max: yMax },
     dataZoom: compact ? [] : [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
@@ -164,7 +180,7 @@ export function TempChart({ pred, height = 220, compact = false }: { pred: Predi
   const option = {
     grid: compact ? { left: 36, right: 12, top: 16, bottom: 24 } : undefined,
     tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ℃`) },
-    legend: { show: !compact, data: ["관측", "가정"] },
+    legend: { show: !compact, data: ["관측", "가정"], tooltip: legendTip },
     xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: 28, interval: compact ? 14 : 7 },
     yAxis: { type: "value", name: "℃", scale: true },
     series: [

@@ -38,3 +38,9 @@ export function addHours(iso: string, h: number): string {
 export function hoursBetween(a: string, b: string): number {
   return (new Date(`${b.slice(0, 19)}Z`).getTime() - new Date(`${a.slice(0, 19)}Z`).getTime()) / 3600_000;
 }
+
+/** 센서 수집 기간 표시: "2026-11-05 ~ 2027-07-02 · 2.0일치" (중간이 비어 있을 수 있어 실제 데이터 양도 함께) */
+export function fmtSensorSpan(first: string, last: string, buckets: number): string {
+  const days = buckets / 144;   // 10분 칸 144개 = 하루
+  return `${first.slice(0, 10)} ~ ${last.slice(0, 10)} · ${days < 10 ? days.toFixed(1) : Math.round(days)}일치`;
+}

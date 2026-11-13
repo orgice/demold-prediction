@@ -34,6 +34,18 @@ export function Loading({ text = "불러오는 중…" }: { text?: string }) {
   return <div className="muted small">{text}</div>;
 }
 
+/**
+ * ⓘ 설명 툴팁. 화면에 늘 띄울 필요는 없지만 궁금하면 볼 수 있어야 하는 설명을 여기에 넣는다.
+ * align: 화면 오른쪽 끝 근처면 "left", 왼쪽 끝 근처면 "right" (말풍선이 잘리지 않게)
+ */
+export function Info({ children, align }: { children: ReactNode; align?: "left" | "right" }) {
+  return (
+    <span className={`info ${align ?? ""}`} tabIndex={0} aria-label="설명 보기">
+      i<span className="info-tip" role="tooltip">{children}</span>
+    </span>
+  );
+}
+
 /** 화면 위에 뜨는 창. 바깥 어두운 부분을 누르면 닫힌다 */
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
@@ -50,7 +62,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
 export function MilestoneBadge({ m }: { m: Milestone }) {
   if (m.reached_at_as_of) return <span className="badge good">✓ 예측 기준 도달</span>;
   if (!m.expected) return <span className="badge bad">28일 내 미도달 예상</span>;
-  return <span className="badge warn">⏳ 미도달</span>;
+  return <span className="badge neutral">예정</span>;
 }
 
 /** 부재 종류에 맞는 해체 기준만 고른다 (벽·기둥 5 MPa, 슬래브 14 MPa). 부재 미설정이면 빈 목록 */
@@ -89,7 +101,7 @@ export function MilestoneRow({ m, baseAgeH }: { m: Milestone; baseAgeH?: number 
       </div>
       <div className="when">
         <MilestoneBadge m={m} />
-        <div>{fmtDateTime(m.expected)}</div>
+        <div className="when-time">{fmtDateTime(m.expected)}</div>
         <div className="tiny">타설 후 {fmtAge(m.expected_age_h)}</div>
         {delay && <div className="tiny">{delay}</div>}
       </div>
