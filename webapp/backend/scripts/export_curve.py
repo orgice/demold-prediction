@@ -13,7 +13,7 @@ from app.models import Pour
 
 # 전체 회차로 곡선을 맞춘다 (exclude_id=None → 어떤 회차도 빼지 않음)
 with SessionLocal() as s:
-    pours = list(s.scalars(select(Pour).options(selectinload(Pour.tests)).order_by(Pour.id)))
+    pours = list(s.scalars(select(Pour).options(selectinload(Pour.tests), selectinload(Pour.exclusions)).order_by(Pour.id)))
 model = maturity.train(engine, pours, exclude_id=None)
 spec = []
 for p in pours:
