@@ -1,32 +1,31 @@
-/* FormCast 화면 스타일 — DESIGN.md(2026-11-12 개정: Bezier 토큰 유지 + 현장 가독성) 기준.
-   이전 디자인은 git 태그 design-before-bezier-20261112 에 보관되어 있다. */
+/* Shopeers-inspired visual tokens. Layout, spacing and font metrics are preserved. */
 :root {
   color-scheme: light;
-  --bg: #F7F7F8;                        /* grey-100 */
+  --bg: #FAFBFD;                        /* grey-100 */
   --surface: #FFFFFF;
-  --surface-2: #EFEFF0;                 /* grey-200 */
-  --hover: rgba(0, 0, 0, 0.05);
-  --press: rgba(0, 0, 0, 0.08);
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.15);
-  --text: rgba(0, 0, 0, 0.85);
-  --text-2: rgba(0, 0, 0, 0.6);
-  --text-3: rgba(0, 0, 0, 0.4);
-  --accent: #5E56F0;
-  --accent-hover: #4E40C9;
-  --accent-bg: rgba(94, 86, 240, 0.1);
-  --accent-ring: rgba(94, 86, 240, 0.3);
+  --surface-2: #F6F8FC;                 /* grey-200 */
+  --hover: rgba(151, 182, 224, 0.08);
+  --press: #F0F3F8;
+  --border: #F0F3F8;
+  --border-strong: #E5EBF3;
+  --text: #171C25;
+  --text-2: #707887;
+  --text-3: #9299A6;
+  --accent: #7C91AF;
+  --accent-hover: #6C819F;
+  --accent-bg: #F4F8FF;
+  --accent-ring: rgba(144, 170, 207, 0.24);
   --accent-ink: #FFFFFF;
-  --good: #41904F;  --good-bg: rgba(49, 165, 82, 0.1);
-  --warn: #C57417;  --warn-bg: rgba(244, 128, 11, 0.1);
-  --bad:  #E94E58;  --bad-bg:  rgba(233, 78, 88, 0.1);
-  --info: #327AB8;  --info-bg: rgba(50, 155, 231, 0.1);
-  --banner: rgba(94, 86, 240, 0.1); --banner-ink: rgba(0, 0, 0, 0.85); --banner-sub: rgba(0, 0, 0, 0.6);
+  --good: #329B70;  --good-bg: #F3FBF7;
+  --warn: #B87624;  --warn-bg: #FFFAF2;
+  --bad:  #D96589;  --bad-bg:  #FFF5F8;
+  --info: #7C91AF;  --info-bg: #F4F8FF;
+  --banner: #F4F8FF; --banner-ink: #171C25; --banner-sub: #707887;
   --topbar-bg: rgba(255, 255, 255, 0.9);
-  --field-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), inset 0 0 0 1px rgba(0, 0, 0, 0.15);
-  --radius: 12px; --radius-s: 6px; --radius-m: 8px; --radius-l: 16px;
-  --shadow: inset 0 0 2px rgba(255,255,255,.12), 0 0 2px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.08);
-  --shadow-pop: inset 0 0 2px rgba(255,255,255,.12), 0 0 2px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.15);
+  --field-shadow: inset 0 0 0 1px var(--border);
+  --radius: 24px; --radius-s: 8px; --radius-m: 12px; --radius-l: 24px;
+  --shadow: inset 0 0 0 1px var(--border);
+  --shadow-pop: inset 0 0 0 1px var(--border), 0 8px 28px rgba(32, 51, 85, .10);
   --shadow-modal: inset 0 0 2px rgba(255,255,255,.12), 0 0 2px rgba(0,0,0,.05), 0 6px 40px rgba(0,0,0,.3);
   --ease: cubic-bezier(0.3, 0, 0, 1); --dur: 150ms;
   --z-float: 1; --z-pop: 1000; --z-modal: 1100;
@@ -51,7 +50,7 @@
     --text: rgba(255, 255, 255, 0.8);
     --text-2: rgba(255, 255, 255, 0.6);
     --text-3: rgba(255, 255, 255, 0.4);
-    --accent: #6687FF; --accent-hover: #5E56F0;
+    --accent: #A6B8D3; --accent-hover: #BCCBE0;
     --accent-bg: rgba(102, 135, 255, 0.1); --accent-ring: rgba(102, 135, 255, 0.3);
     --good: #3ACF5A; --good-bg: rgba(58, 207, 90, 0.1);
     --warn: #FFAB5C; --warn-bg: rgba(255, 171, 92, 0.1);
@@ -178,13 +177,13 @@ a.card:hover { text-decoration: none; box-shadow: var(--shadow-pop); }
   font: inherit; font-size: 14px; line-height: 20px; font-weight: 700; cursor: pointer; white-space: nowrap; text-decoration: none; }
 .btn:hover { background: var(--press); text-decoration: none; }
 .btn:active { transform: scale(0.98); }
-.btn.primary { background: var(--accent); color: var(--accent-ink); }
-.btn.primary:hover { background: var(--accent-hover); }
+.btn.primary { background: var(--accent-bg); color: var(--accent); }
+.btn.primary:hover { background: var(--hover); }
 .btn.danger { background: var(--bad-bg); color: var(--bad); }
 .btn.danger:hover { background: rgba(233, 78, 88, 0.16); }
 .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
 .btn:disabled:hover { background: var(--hover); }
-.btn.primary:disabled:hover { background: var(--accent); }
+.btn.primary:disabled:hover { background: var(--accent-bg); }
 .btn.sm { height: 28px; padding: 0 10px; border-radius: var(--radius-s); font-size: 13px; }
 
 /* ---------- 탭 ---------- */
@@ -445,3 +444,53 @@ tbody tr:hover { background: var(--hover); }
 .pour-card .badge { font-size: 11px; padding: 2px 6px; }
 .pour-card td:first-child { white-space: nowrap; color: var(--text-2); }
 .pour-card td .tiny { display: block; }
+
+/* Surface-only refinements: inset borders never change the box model.
+   Keep font metrics, padding, dimensions, grid/flex and breakpoints above unchanged. */
+.nav a.active { box-shadow: none; }
+.btn, .btn.sm { border-radius: 999px; }
+.btn:not(.primary):not(.danger) { background: var(--surface); box-shadow: var(--shadow); }
+.btn:not(.primary):not(.danger):hover { background: var(--accent-bg); }
+.btn.primary { box-shadow: var(--shadow); }
+.icon-btn { border-radius: 50%; background: var(--surface); box-shadow: var(--shadow); }
+.icon-btn.on { background: var(--accent-bg); }
+select { border-radius: 999px; }
+.seg { border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border); }
+.seg button { border-radius: 999px; }
+.seg button.on { color: var(--accent); }
+.banner { background: linear-gradient(110deg, var(--surface), var(--accent-bg)); box-shadow: var(--shadow); }
+.card .kpi { background: var(--surface); box-shadow: var(--shadow); }
+.kpi .label { color: var(--text-2); }
+.kpi .value { color: var(--text); }
+.kpi .sub { color: var(--text-2); }
+.card .kpis-2 .kpi { background: none; box-shadow: none; }
+.demo-band, .alert { box-shadow: inset 0 0 0 1px var(--border); }
+tbody td { border-bottom-style: dashed; }
+
+/* Reference button colors; selected navigation has no leading accent stripe. */
+:root {
+  --button-bg: #EFF4FF;
+  --button-ink: #2870FA;
+  --button-hover: #E7EFFF;
+}
+.nav a.active,
+.btn.primary,
+.seg button.on,
+.chip.on,
+.icon-btn.on {
+  background: var(--button-bg);
+  color: var(--button-ink);
+  box-shadow: none;
+}
+.nav a.active:hover,
+.btn.primary:hover,
+.seg button.on:hover,
+.chip.on:hover,
+.icon-btn.on:hover { background: var(--button-hover); }
+.btn.primary:disabled:hover { background: var(--button-bg); }
+/* Keep keyboard focus visible without adding a persistent left border. */
+.nav a.active:focus-visible,
+.btn.primary:focus-visible,
+.seg button.on:focus-visible,
+.chip.on:focus-visible,
+.icon-btn.on:focus-visible { box-shadow: 0 0 0 3px var(--accent-ring); }

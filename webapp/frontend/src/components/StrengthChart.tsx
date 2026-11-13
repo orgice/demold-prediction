@@ -1,5 +1,5 @@
 // 강도·온도 그래프 (대시보드와 회차 상세에서 같이 쓴다). 화면설계서 1·3·4·9쪽.
-//   StrengthChart        회차 하나: 최초 예측(회색 점선) · 실측 기반 추정(초록 실선) · 수정 예측(주황) · 목표 강도(보라 점선)
+//   StrengthChart        회차 하나: 최초 예측(회색 점선) · 실측 기반 추정(파랑 실선) · 수정 예측(주황) · 목표 강도(보라 점선)
 //   CompareStrengthChart 여러 회차를 같은 축에: 회차별 고유 색, 실측은 진한 실선, 예측은 옅은 점선
 //   TempChart / CompareTempChart  콘크리트 내부온도
 import type { Prediction } from "../api/client";
@@ -8,14 +8,14 @@ import { Chart, useChartTheme } from "./Chart";
 
 /** 그래프 의미별 색 (범례와 같은 색) */
 export const LINE = {
-  initial: "#666666",   // 최초 예측 (점선)
-  observed: "#0FB3A3",  // 실측(관측 온도) 기반 추정 — teal
-  forecast: "#F4800B",  // 가정 온도 기반 이후 예측 — orange 점선
-  target: "#915CE0",    // 목표 강도 (5·14 MPa·설계강도) — purple
+  initial: "#9AA2AF",   // 최초 예측 (점선)
+  observed: "#397CF5",  // 실측(관측 온도) 기반 추정 — blue
+  forecast: "#E99B47",  // 가정 온도 기반 이후 예측 — orange 점선
+  target: "#9673D4",    // 목표 강도 (5·14 MPa·설계강도) — purple
 };
 
 // 회차 비교 색: 회차 번호(정렬 순서)에 고정. 선택을 바꿔도 같은 회차는 같은 색
-const POUR_COLORS = ["#5E56F0", "#F4800B", "#0FB3A3", "#CB48AD", "#329BE7", "#818628", "#915CE0", "#3A4F8D"];
+const POUR_COLORS = ["#2870FA", "#E99B47", "#397CF5", "#D9709B", "#54BE93", "#818628", "#9673D4", "#3A4F8D"];
 export function pourColor(index: number) {
   return POUR_COLORS[((index % POUR_COLORS.length) + POUR_COLORS.length) % POUR_COLORS.length];
 }
@@ -107,12 +107,12 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
             ...pred.series.map((s) => api.coord([day(s.age_h), s.upper])),
             ...[...pred.series].reverse().map((s) => api.coord([day(s.age_h), s.lower])),
           ] },
-          style: { fill: LINE.forecast, opacity: 0.12 },
+          style: { fill: LINE.observed, opacity: 0.10 },
         }) },
       { name: "실측 기반 추정", type: "line", symbol: "none", data: obs.map((s) => [day(s.age_h), s.strength]),
         lineStyle: { width: 2.5, color: LINE.observed }, itemStyle: { color: LINE.observed }, z: 3,
         // 실측 구간 음영 + 현재 시점 세로선
-        markArea: { silent: true, itemStyle: { color: LINE.observed, opacity: 0.07 }, data: [[{ xAxis: 0 }, { xAxis: nowX }]] },
+        markArea: { silent: true, itemStyle: { color: LINE.observed, opacity: 0.025 }, data: [[{ xAxis: 0 }, { xAxis: nowX }]] },
         markLine: { symbol: "none", silent: true, lineStyle: { color: th.text, type: "dashed", width: 1 },
           label: { formatter: compact ? `${fmtAge(hoursBetween(pred.start, pred.as_of))}` : nowLabel(pred.as_of) + ` ${fmtAge(hoursBetween(pred.start, pred.as_of))}`,
             position: "end", color: th.strong, fontSize: 11, align: nowX > 14 ? "right" : "left" },
