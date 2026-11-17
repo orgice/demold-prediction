@@ -205,4 +205,39 @@ export const api = {
   // AI 상담 (routers/agent.py)
   ask: (question: string, history: ChatMessage[]) =>
     request<AgentReply>("/api/agent/ask", json("POST", { question, history })),
+  askStream,
 };
+
+/** AI 상담 스트리밍 이벤트 (서버가 한 줄에 하나씩 보냄) */
+export type AgentEvent =
+  | ({ type: "step" } & AgentStep)              // 도구 하나를 실행함
+  | { type: "delta"; text: string }             // 답변 글자 조각
+  | { type: "reset" }                           // 지금까지 받은 글자는 답이 아니었음 → 지움
+  | ({ type: "done" } & AgentReply)             // 끝 (answer = 최종 답변 전체)
+  | { type: "error"; message: string };         // 실패
+
+/** AI에게 질문하고, 진행 상황·답변 글자를 오는 대로 onEvent 로 넘긴다. 서버가 error 이벤트를 보내면 ApiError 를 던진다 */
+async function askStream(question: string, history: ChatMessage[], onEvent: (e: AgentEvent) => void): Promise<void> {
+  const res = await fetch("/api/agent/ask/stream", json("POST", { question, history }));
+  if (!res.ok || !res.body) {
+    let msg = `${res.status} ${res.statusText}`;
+    try { const b = await res.json(); if (typeof b.detail === "string") msg = b.detail; } catch { /* 본문 없음 */ }
+    throw new ApiError(msg);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    buf += decoder.decode(value, { stream: !done });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";            // 마지막 줄은 아직 덜 왔을 수 있어 남겨 둔다
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const ev = JSON.parse(line) as AgentEvent;
+      if (ev.type === "error") throw new ApiError(ev.message);
+      onEvent(ev);
+    }
+    if (done) break;
+  }
+}
