@@ -83,7 +83,22 @@ export default function Sensors() {
     return () => clearTimeout(t);
   }, [macs.join(","), start, end, rangeError]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggle = (mac: string) => setMacs((m) => (m.includes(mac) ? m.filter((x) => x !== mac) : [...m, mac]));
+  // 센서를 켤 때 지금 기간에 그 센서 기록이 없으면(또는 처음 고른 센서면) 기간을 그 센서의 수집 기간으로 맞춘다
+  // 수집 기간이 MAX_DAYS보다 길면 마지막 MAX_DAYS일만
+  const toggle = (mac: string) => {
+    if (macs.includes(mac)) return setMacs(macs.filter((x) => x !== mac));
+    const s = all.find((x) => x.mac === mac);
+    if (s) {
+      const first = dateOf(s.first), last = dateOf(s.last);
+      const overlaps = from && to && first <= to && last >= from;
+      if (macs.length === 0 || !overlaps) {
+        const minFrom = dateOf(addHours(`${last}T00:00:00`, -(MAX_DAYS - 1) * 24));
+        setFrom(first < minFrom ? minFrom : first);
+        setTo(last);
+      }
+    }
+    setMacs([...macs, mac]);
+  };
   // 회차 센서를 앞에, 나머지는 최근 수집 순
   const chipOrder = [...all].sort((a, b) =>
     Number(pour?.sensors.includes(b.mac) ?? 0) - Number(pour?.sensors.includes(a.mac) ?? 0) || (a.last < b.last ? 1 : -1));
