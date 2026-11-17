@@ -488,6 +488,8 @@ tbody td { border-bottom-style: dashed; }
 .chip.on:hover,
 .icon-btn.on:hover { background: var(--button-hover); }
 .btn.primary:disabled:hover { background: var(--button-bg); }
+/* 켜진 칩은 다크 모드에서도 밝은 배경이라, 보조 글자(.tiny)는 칩 글자색을 연하게 따른다 */
+.chip.on .tiny { color: inherit; opacity: 0.7; font-weight: 400; }
 /* Keep keyboard focus visible without adding a persistent left border. */
 .nav a.active:focus-visible,
 .btn.primary:focus-visible,
