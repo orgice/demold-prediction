@@ -4,19 +4,42 @@
 // 대화는 이 화면에만 있고 저장되지 않는다 (새로고침하면 사라짐).
 import { Fragment, ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { AgentStep, api, ChatMessage, MEMBER_LABEL } from "../api/client";
+import { AgentStep, api, ChatMessage, MEMBER_LABEL, Pour } from "../api/client";
 import { Info, useAsync } from "../components/common";
 
 /** 말풍선 하나: 질문 또는 답변 (+ AI가 부른 도구 목록, 걸린 시간, 오류 여부) */
 interface Turn extends ChatMessage { steps?: AgentStep[]; elapsed_ms?: number; error?: boolean; pending?: boolean; stale?: boolean }
 
-// 처음 화면에 보여 주는 예시 질문
-const EXAMPLES = [
-  "테스트시험 슬래브 언제 떼도 돼?",
-  "지금 벽체 해체 가능한 회차는?",
-  "3회차 벽체 해체는 언제였고, 그때 내부온도는 어땠어?",
-  "5회차 28일 강도가 설계강도에 도달할까?",
-];
+// 처음 화면에 보여 주는 예시 질문.
+// 회차 이름은 고정하지 않고 DB에 있는 회차로 채운다 (예전처럼 없는 이름을 물어 답이 안 나오는 일을 막으려고).
+const ACTIVE_DAYS = 28;   // 진행 중 회차 기준 (backend agent.py 의 ACTIVE_DAYS 와 같음)
+
+/** 예시에 쓸 회차: 타설 후 28일이 지난 회차 중 공시체 결과가 있는 가장 최근 회차 */
+function exampleTarget(pours: Pour[]): Pour | null {
+  const done = pours
+    .map((p) => ({ p, start: Date.parse(p.pour_start ?? p.detected_start ?? "") }))
+    .filter(({ p, start }) => !isNaN(start) && p.test_count > 0 && Date.now() - start > ACTIVE_DAYS * 86400e3)
+    .sort((a, b) => b.start - a.start);
+  return done[0]?.p ?? null;
+}
+
+/** 타설 시각이 가장 늦은 회차 */
+function latestPour(pours: Pour[] | null | undefined): Pour | null {
+  const dated = (pours ?? [])
+    .map((p) => ({ p, start: Date.parse(p.pour_start ?? p.detected_start ?? "") }))
+    .filter(({ start }) => !isNaN(start))
+    .sort((a, b) => b.start - a.start);
+  return dated[0]?.p ?? null;
+}
+
+function defaultExamples(pours: Pour[] | null | undefined): string[] {
+  const p = pours ? exampleTarget(pours) : null;
+  return [
+    "지금 진행 중인 회차 중 벽체·슬래브 해체 가능한 곳 있어?",
+    ...(p ? [`${p.name} 회차 28일 강도가 설계강도에 도달했어?`, `${p.name} 회차 타설 후 첫 24시간 내부온도는 어땠어?`] : []),
+    "슬래브 거푸집은 강도가 얼마일 때 떼도 돼?",
+  ];
+}
 
 // 도구 이름을 화면에 보여 줄 한국어로 (목록에 없으면 영어 이름 그대로)
 const TOOL_LABEL: Record<string, string> = {
@@ -51,9 +74,13 @@ export default function Assistant() {
   const pourId = params.get("pour") ? Number(params.get("pour")) : null;
   const target = useAsync(() => (pourId ? api.pour(pourId) : Promise.resolve(null)), [pourId]);
   const tp = target.data;
+  const allPours = useAsync(() => api.pours(), []);
   const examples = tp
     ? [`${tp.name} 목표 강도 도달 예상은?`, `${tp.name} 공시체 결과가 반영됐나요?`, `${tp.name} 예측의 근거를 설명해 줘`]
-    : EXAMPLES;
+    : defaultExamples(allPours.data);
+  // 입력창 안내 문구도 DB에 있는 회차 이름으로 (가장 최근에 타설한 회차, 없으면 이름 없이)
+  const latest = tp ?? latestPour(allPours.data);
+  const placeholder = latest ? `예: ${latest.name} 회차 슬래브 해체 언제 가능해?` : "예: 진행 중인 회차 슬래브 해체 언제 가능해?";
 
   // 중괄호 필수: scrollIntoView 가 값을 돌려주는 브라우저에서 React 가 그 값을 정리 함수로 실행하다 죽는다
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [turns, busy]);
@@ -145,7 +172,7 @@ export default function Assistant() {
       </div>
 
       <form className="chat-input" onSubmit={(e) => { e.preventDefault(); send(input); }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={tp ? `예: ${tp.name} 해체 언제 가능해?` : "예: 4회차 슬래브 해체 언제 가능해?"}
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={placeholder}
           maxLength={1000} disabled={busy} />
         <button className="btn primary" type="submit" disabled={busy || !input.trim()}>보내기</button>
       </form>
