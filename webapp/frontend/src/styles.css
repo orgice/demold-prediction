@@ -418,3 +418,64 @@ tbody tr:hover { background: var(--hover); }
   .icon-btn, .tri { width: 44px; height: 44px; }
   .picker-item { min-height: 44px; }
 }
+
+/* ---------- 로그인 · 사용자 관리 (⚠ 백엔드 미연동 목업 화면, 2026-11-17 추가) ---------- */
+.topbar-user { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
+.topbar-name { font-size: 14px; font-weight: 600; color: var(--text); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge.role-viewer { background: var(--press); color: var(--text-2); }
+.badge.role-editor { background: var(--good-bg); color: var(--good); }
+.badge.role-admin { background: var(--accent-bg); color: var(--accent); }
+
+.login-page { align-items: center; padding-top: 64px; }
+.login-card { width: min(400px, 100%); gap: 16px; }
+.login-submit { width: 100%; height: 44px; }
+.alert code { font-size: 12px; }
+
+.btn.danger-fill { background: var(--bad); border-color: var(--bad); color: #FFFFFF; }
+.btn.danger-fill:hover { background: var(--bad); filter: none; opacity: 0.9; }
+.btn.danger-fill:disabled:hover { background: var(--bad); }
+
+.check-line { font-weight: 400; color: var(--text); cursor: pointer; gap: 6px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.user-table td { vertical-align: middle; }
+.user-actions { justify-content: flex-end; gap: 6px; }
+.row-inactive td { color: var(--text-3); }
+.row-inactive td b { color: var(--text-2); }
+
+.role-picker { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.role-option { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m); background: var(--surface); cursor: pointer; font-weight: 400; color: var(--text); }
+.role-option:hover { background: var(--hover); }
+.role-option.on { border-color: var(--accent); background: var(--accent-bg); box-shadow: 0 0 0 1px var(--accent); }
+.role-option.disabled { opacity: 0.6; cursor: default; }
+.role-option input { margin-top: 3px; }
+.role-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.role-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.role-can { margin: 0; padding-left: 16px; font-size: 12px; line-height: 18px; color: var(--text-2); }
+.role-guide { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.role-guide-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: var(--radius-m); background: var(--surface-2); }
+.role-guide-item .role-can { font-size: 13px; line-height: 20px; }
+
+@media (max-width: 640px) {
+  .topbar-user { margin-left: 0; width: 100%; justify-content: flex-end; padding-bottom: 8px; order: 3; }
+  /* 관리자 메뉴가 더해져 5개가 되면 줄바꿈 대신 한 줄 가로 스크롤 (4개일 때는 기존과 같은 모양) */
+  .nav { width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .nav a { flex: none; height: auto; }
+  .login-page { padding-top: 24px; }
+  /* 사용자 목록: 좁은 화면에서는 표 대신 카드형 요약 */
+  .user-table thead { display: none; }
+  .user-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .user-table tbody tr:hover { background: none; }
+  .user-table td { height: auto; padding: 0; border: none; }
+  .user-table .uc-id { grid-column: 1; }
+  .user-table .uc-role { grid-column: 2; grid-row: 1; text-align: right; }
+  .user-table .uc-name { grid-column: 1; }
+  .user-table .uc-state { grid-column: 2; grid-row: 2; text-align: right; }
+  .user-table .uc-date { grid-column: 1 / -1; }
+  .user-table .uc-actions { grid-column: 1 / -1; text-align: left; margin-top: 4px; }
+  .user-table .user-actions { justify-content: flex-start; }
+  .user-table .user-actions .btn { flex: 1; }
+  .user-table .table-empty { grid-column: 1 / -1; }
+  .role-option { min-height: 44px; }
+}
