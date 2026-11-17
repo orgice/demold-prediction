@@ -1,28 +1,61 @@
 // [화면] AI 상담 ( /assistant )
 // 질문을 보내면 서버의 AI(backend/app/agent.py)가 예측 도구를 불러 답한다.
+// 답은 스트리밍으로 받아 글자가 생기는 대로 말풍선에 이어 붙인다 (기다리는 시간이 덜 느껴지도록).
 // 대화는 이 화면에만 있고 저장되지 않는다 (새로고침하면 사라짐).
-import { useEffect, useRef, useState } from "react";
+import { Fragment, ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { AgentStep, api, ChatMessage, MEMBER_LABEL } from "../api/client";
+import { AgentStep, api, ChatMessage, MEMBER_LABEL, Pour } from "../api/client";
 import { Info, useAsync } from "../components/common";
 
 /** 말풍선 하나: 질문 또는 답변 (+ AI가 부른 도구 목록, 걸린 시간, 오류 여부) */
-interface Turn extends ChatMessage { steps?: AgentStep[]; elapsed_ms?: number; error?: boolean }
+interface Turn extends ChatMessage { steps?: AgentStep[]; elapsed_ms?: number; error?: boolean; pending?: boolean; stale?: boolean }
 
-// 처음 화면에 보여 주는 예시 질문
-const EXAMPLES = [
-  "테스트시험 슬래브 언제 떼도 돼?",
-  "지금 벽체 해체 가능한 회차는?",
-  "3회차 벽체 해체는 언제였고, 그때 내부온도는 어땠어?",
-  "5회차 28일 강도가 설계강도에 도달할까?",
-];
+// 처음 화면에 보여 주는 예시 질문.
+// 회차 이름은 고정하지 않고 DB에 있는 회차로 채운다 (예전처럼 없는 이름을 물어 답이 안 나오는 일을 막으려고).
+const ACTIVE_DAYS = 28;   // 진행 중 회차 기준 (backend agent.py 의 ACTIVE_DAYS 와 같음)
+
+/** 예시에 쓸 회차: 타설 후 28일이 지난 회차 중 공시체 결과가 있는 가장 최근 회차 */
+function exampleTarget(pours: Pour[]): Pour | null {
+  const done = pours
+    .map((p) => ({ p, start: Date.parse(p.pour_start ?? p.detected_start ?? "") }))
+    .filter(({ p, start }) => !isNaN(start) && p.test_count > 0 && Date.now() - start > ACTIVE_DAYS * 86400e3)
+    .sort((a, b) => b.start - a.start);
+  return done[0]?.p ?? null;
+}
+
+/** 타설 시각이 가장 늦은 회차 */
+function latestPour(pours: Pour[] | null | undefined): Pour | null {
+  const dated = (pours ?? [])
+    .map((p) => ({ p, start: Date.parse(p.pour_start ?? p.detected_start ?? "") }))
+    .filter(({ start }) => !isNaN(start))
+    .sort((a, b) => b.start - a.start);
+  return dated[0]?.p ?? null;
+}
+
+function defaultExamples(pours: Pour[] | null | undefined): string[] {
+  const p = pours ? exampleTarget(pours) : null;
+  return [
+    "지금 진행 중인 회차 중 벽체·슬래브 해체 가능한 곳 있어?",
+    ...(p ? [`${p.name} 회차 28일 강도가 설계강도에 도달했어?`, `${p.name} 회차 타설 후 첫 24시간 내부온도는 어땠어?`] : []),
+    "슬래브 거푸집은 강도가 얼마일 때 떼도 돼?",
+  ];
+}
 
 // 도구 이름을 화면에 보여 줄 한국어로 (목록에 없으면 영어 이름 그대로)
 const TOOL_LABEL: Record<string, string> = {
   list_pours: "회차 목록 조회",
   get_prediction: "강도·해체 시각 예측",
   get_temperature_summary: "내부온도 조회",
+  search_guideline: "해체 가이드라인 검색",
 };
+
+/** 답변 글자 표시: LLM이 쓰는 **굵게** 표시만 굵은 글씨로 바꾼다 (줄바꿈·목록은 .bubble-text 의 pre-wrap 으로 그대로 보임) */
+function renderText(text: string): ReactNode {
+  return text.split(/(\*\*[^*\n]+?\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") && part.length > 4
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : <Fragment key={i}>{part}</Fragment>);
+}
 
 /** "강도·해체 시각 예측 (pour_id=3)" 같은 도구 호출 설명 */
 function stepText(s: AgentStep) {
@@ -41,26 +74,39 @@ export default function Assistant() {
   const pourId = params.get("pour") ? Number(params.get("pour")) : null;
   const target = useAsync(() => (pourId ? api.pour(pourId) : Promise.resolve(null)), [pourId]);
   const tp = target.data;
+  const allPours = useAsync(() => api.pours(), []);
   const examples = tp
     ? [`${tp.name} 목표 강도 도달 예상은?`, `${tp.name} 공시체 결과가 반영됐나요?`, `${tp.name} 예측의 근거를 설명해 줘`]
-    : EXAMPLES;
+    : defaultExamples(allPours.data);
+  // 입력창 안내 문구도 DB에 있는 회차 이름으로 (가장 최근에 타설한 회차, 없으면 이름 없이)
+  const latest = tp ?? latestPour(allPours.data);
+  const placeholder = latest ? `예: ${latest.name} 회차 슬래브 해체 언제 가능해?` : "예: 진행 중인 회차 슬래브 해체 언제 가능해?";
 
   // 중괄호 필수: scrollIntoView 가 값을 돌려주는 브라우저에서 React 가 그 값을 정리 함수로 실행하다 죽는다
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [turns, busy]);
 
-  /** 질문 보내기: 화면에 먼저 띄우고, 이전 대화와 함께 서버에 보낸 뒤 답을 붙인다 */
+  /** 질문 보내기: 질문과 빈 답변 말풍선을 먼저 띄우고, 서버가 보내는 글자·도구 실행을 오는 대로 그 말풍선에 채운다 */
   const send = async (q: string) => {
     const question = q.trim();
     if (!question || busy) return;
     const history: ChatMessage[] = turns.filter((t) => !t.error).map(({ role, content }) => ({ role, content }));
-    setTurns((t) => [...t, { role: "user", content: question }]);
+    setTurns((t) => [...t, { role: "user", content: question }, { role: "assistant", content: "", steps: [], pending: true }]);
     setInput("");
     setBusy(true);
+    // 마지막 말풍선(지금 받는 답변)만 고친다
+    const patch = (f: (t: Turn) => Turn) => setTurns((ts) => [...ts.slice(0, -1), f(ts[ts.length - 1])]);
     try {
-      const r = await api.ask(question, history);
-      setTurns((t) => [...t, { role: "assistant", content: r.answer, steps: r.steps, elapsed_ms: r.elapsed_ms }]);
+      await api.askStream(question, history, (ev) => {
+        // reset: LLM이 쓰던 글을 버리고 도구를 더 부름 → 바로 비우면 빈 말풍선이 오래 보이므로,
+        //        새 글자가 올 때까지 흐리게 남겨 두었다가 첫 글자가 오면 바꾼다
+        if (ev.type === "delta") patch((t) => ({ ...t, content: (t.stale ? "" : t.content) + ev.text, stale: false }));
+        else if (ev.type === "reset") patch((t) => ({ ...t, stale: true }));
+        else if (ev.type === "step") patch((t) => ({ ...t, steps: [...(t.steps ?? []), { tool: ev.tool, args: ev.args, ok: ev.ok }] }));
+        else if (ev.type === "done") patch((t) => ({ ...t, content: ev.answer, steps: ev.steps, elapsed_ms: ev.elapsed_ms, pending: false, stale: false }));
+      });
+      patch((t) => ({ ...t, pending: false, stale: false }));
     } catch (e) {
-      setTurns((t) => [...t, { role: "assistant", content: (e as Error).message, error: true }]);
+      patch(() => ({ role: "assistant", content: (e as Error).message, error: true }));
     } finally {
       setBusy(false);
     }
@@ -101,9 +147,15 @@ export default function Assistant() {
         {turns.map((t, i) => (
           <div key={i} className={`bubble-row ${t.role}`}>
             <div className={`bubble ${t.role} ${t.error ? "error" : ""}`}>
-              <div className="bubble-text">{t.content}</div>
-              {/* 도구 호출·소요 시간 같은 기술 정보는 접어 둔다 (DESIGN.md 12.5) */}
-              {((t.steps && t.steps.length > 0) || t.elapsed_ms != null) && (
+              {t.content.trim() && <div className={`bubble-text ${t.stale ? "muted" : ""}`}>{renderText(t.content)}</div>}
+              {t.pending && (!t.content.trim() || t.stale) && (
+                  // 첫 글자가 오기 전이나 도구를 더 부르는 동안: 지금 하고 있는 일을 보여 준다
+                  <div className="muted small">
+                    {t.steps?.length ? `${stepText(t.steps[t.steps.length - 1])} 결과로 답을 쓰는 중…` : "생각하는 중…"}
+                  </div>
+                )}
+              {/* 도구 호출·소요 시간 같은 기술 정보는 접어 둔다 (DESIGN.md 12.5). 답이 끝난 뒤에 보인다 */}
+              {!t.pending && ((t.steps && t.steps.length > 0) || t.elapsed_ms != null) && (
                 <details className="steps">
                   <summary className="tiny">
                     근거 보기{t.steps?.length ? ` · 예측 도구 ${t.steps.length}회` : ""}{t.elapsed_ms != null ? ` · ${(t.elapsed_ms / 1000).toFixed(1)}초` : ""}
@@ -116,16 +168,11 @@ export default function Assistant() {
             </div>
           </div>
         ))}
-        {busy && (
-          <div className="bubble-row assistant">
-            <div className="bubble assistant muted small">생각하는 중… 보통 10~30초 걸립니다</div>
-          </div>
-        )}
         <div ref={bottom} />
       </div>
 
       <form className="chat-input" onSubmit={(e) => { e.preventDefault(); send(input); }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={tp ? `예: ${tp.name} 해체 언제 가능해?` : "예: 4회차 슬래브 해체 언제 가능해?"}
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={placeholder}
           maxLength={1000} disabled={busy} />
         <button className="btn primary" type="submit" disabled={busy || !input.trim()}>보내기</button>
       </form>

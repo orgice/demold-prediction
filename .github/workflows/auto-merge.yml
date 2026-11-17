@@ -1,0 +1,50 @@
+# PR 자동 머지: main 대상 PR의 CI(충돌 검사·프론트엔드 빌드·백엔드 실행 확인)가 모두 통과하면 main에 머지한다.
+#   - CI가 하나라도 실패하거나 취소되면 머지하지 않는다.
+#   - Draft PR, 다른 저장소(fork)에서 온 PR, 'no-auto-merge' 라벨이 붙은 PR은 건너뛴다.
+#   - CI가 도는 사이 새 커밋이 올라오면 검사한 커밋과 PR 끝이 달라 머지하지 않는다(새 커밋의 CI가 다시 판단).
+name: Auto merge
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    name: CI 통과한 PR 머지
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: PR 찾아서 머지
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr=$(gh pr list --base main --head "$HEAD_BRANCH" --state open \
+                 --json number,isDraft,headRefOid,labels \
+                 --jq '.[0]')
+          if [ -z "$pr" ] || [ "$pr" = "null" ]; then
+            echo "열린 PR이 없습니다 ($HEAD_BRANCH)."; exit 0
+          fi
+          number=$(echo "$pr" | jq -r .number)
+          if [ "$(echo "$pr" | jq -r .isDraft)" = "true" ]; then
+            echo "PR #$number 은 Draft라 건너뜁니다."; exit 0
+          fi
+          if echo "$pr" | jq -e '.labels[] | select(.name == "no-auto-merge")' > /dev/null; then
+            echo "PR #$number 에 no-auto-merge 라벨이 있어 건너뜁니다."; exit 0
+          fi
+          if [ "$(echo "$pr" | jq -r .headRefOid)" != "$HEAD_SHA" ]; then
+            echo "PR #$number 에 새 커밋이 올라와 이번 검사 결과로는 머지하지 않습니다."; exit 0
+          fi
+          gh pr merge "$number" --merge --match-head-commit "$HEAD_SHA"
+          echo "PR #$number 을 main에 머지했습니다."

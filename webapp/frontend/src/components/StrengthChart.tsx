@@ -23,6 +23,11 @@ export function pourColor(index: number) {
 const day = (h: number) => +(h / 24).toFixed(3);
 const f1 = (v: number | null | undefined) => (v == null ? "—" : v.toFixed(1));
 
+/** 가로축 끝(일): 기본 30일, 공시체를 그보다 늦게 깼으면 그 점까지 보이게 하루 단위로 늘린다 */
+function xMaxDay(preds: Prediction[]) {
+  return Math.max(30, ...preds.flatMap((p) => p.tests.map((t) => Math.ceil(t.age_h / 24))));
+}
+
 /** 공시체 시험 1회 = 점 하나 (예전에 3개씩 넣은 결과는 평균) */
 export function testPoints(pred: Prediction, used?: boolean) {
   const groups = new Map<number, { age_h: number; sum: number; n: number; used: boolean }>();
@@ -95,7 +100,7 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
       },
     },
     legend: { show: !compact, data: ["최초 예측", "실측 기반 추정", "수정 예측", "목표 강도", "공시체"], tooltip: legendTip },
-    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: 28, interval: 7 },
+    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: xMaxDay([pred]), interval: 7 },
     yAxis: { type: "value", name: "MPa", min: 0, max: yMax },
     dataZoom: compact ? [] : [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
     series: [
@@ -163,7 +168,7 @@ export function CompareStrengthChart({ items, design, height = 400 }: { items: C
     tooltip: { trigger: "item", formatter: (p: { seriesName: string; value: number[] }) =>
       `${p.seriesName} · 타설 후 ${p.value[0].toFixed(1)}일<br/><b>${f1(p.value[1])} MPa</b>` },
     legend: { data: items.map((i) => i.name) },
-    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: 28, interval: 7 },
+    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7 },
     yAxis: { type: "value", name: "MPa", min: 0 },
     dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
     series: [...series,
@@ -181,7 +186,7 @@ export function TempChart({ pred, height = 220, compact = false }: { pred: Predi
     grid: compact ? { left: 36, right: 12, top: 16, bottom: 24 } : undefined,
     tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ℃`) },
     legend: { show: !compact, data: ["관측", "가정"], tooltip: legendTip },
-    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: 28, interval: compact ? 14 : 7 },
+    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: xMaxDay([pred]), interval: compact ? 14 : 7 },
     yAxis: { type: "value", name: "℃", scale: true },
     series: [
       { name: "관측", type: "line", symbol: "none", lineStyle: { width: 1.5, color: th.accent }, itemStyle: { color: th.accent },
@@ -199,7 +204,7 @@ export function CompareTempChart({ items, height = 200 }: { items: CompareItem[]
     grid: { left: 56, right: 24, top: 32, bottom: 40 },
     tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ℃`) },
     legend: { data: items.map((i) => i.name) },
-    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", nameGap: 24, min: 0, max: 28, interval: 7 },
+    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", nameGap: 24, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7 },
     yAxis: { type: "value", name: "℃", scale: true },
     series: items.map(({ pred, name, color }) => ({
       name, type: "line", symbol: "none", lineStyle: { width: 1.5, color }, itemStyle: { color },

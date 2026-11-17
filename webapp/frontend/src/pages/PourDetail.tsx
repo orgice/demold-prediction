@@ -92,7 +92,7 @@ function PredictionTab({ pour, version, onTab }: { pour: Pour; version: number; 
         <div className="card">
           <div className="card-head">
             <h3>최초 예측과 실측 기반 추정
-              <Info align="right">회색 점선은 최초 예측(타설 후 24시간 시점), 초록선은 실측 온도로 계산한 값, 주황선은 현재 시점에서 이어지는 수정 예측입니다. 옅은 주황 음영은 90% 범위입니다. 범례에 마우스를 올려도 설명이 나옵니다.</Info>
+              <Info align="right">회색 점선은 최초 예측(타설 후 24시간 시점), 파랑 실선은 실측 온도로 계산한 값, 주황 점선은 현재 시점에서 이어지는 수정 예측입니다. 옅은 파랑 음영은 90% 범위입니다. 범례에 마우스를 올려도 설명이 나옵니다.</Info>
             </h3>
           </div>
           <StrengthChart pred={pred} design={pour.design_strength} />

@@ -80,6 +80,8 @@ docker compose down -v     # DB까지 완전히 삭제
 
 ## 3. 예측 모델
 
+계산 방법·상수·한계의 자세한 설명(숫자 예시 포함)은 [ALGORITHMS.md](ALGORITHMS.md)에 있습니다.
+
 | 단계 | 방법 |
 |---|---|
 | 적산온도 | Nurse-Saul, M = Σ max(T − 0℃, 0)·Δt (℃·일). 선택한 센서들의 내부온도 평균 |
