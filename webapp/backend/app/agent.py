@@ -48,15 +48,26 @@ def _fmt(t) -> str | None:
     return None if t is None else pd.Timestamp(t).strftime("%Y-%m-%d %H:%M")
 
 
+ACTIVE_DAYS = 28      # 진행 중 회차 = 타설 후 28일이 지나지 않은 회차 (화면 '현재 공사'·대시보드와 같은 기준)
+
+
 def tool_list_pours(s: Session) -> dict:
-    """[도구] 회차 목록. AI가 '3회차' 같은 이름을 pour_id로 바꿀 때 쓴다."""
-    return {"pours": [{
-        "pour_id": p.id, "name": p.name, "site": p.site,
-        "pour_start": _fmt(p.start),
-        "start_source": "확정 입력값" if p.pour_start else ("측압 자동 추정" if p.detected_start else "없음"),
-        "design_strength_mpa": p.design_strength,
-        "strength_tests": len(p.tests),
-    } for p in _all_pours(s)]}
+    """[도구] 회차 목록. AI가 '3회차' 같은 이름을 pour_id로 바꾸거나, 진행 중인 회차를 고를 때 쓴다."""
+    now = datetime.utcnow() + timedelta(hours=9)   # 한국 시간 (컨테이너 시계는 UTC)
+    out = []
+    for p in _all_pours(s):
+        age = (now - p.start).total_seconds() / 86400 if p.start else None
+        out.append({
+            "pour_id": p.id, "name": p.name, "site": p.site,
+            "pour_start": _fmt(p.start),
+            "start_source": "확정 입력값" if p.pour_start else ("측압 자동 추정" if p.detected_start else "없음"),
+            "days_since_pour": None if age is None else round(age, 1),
+            # 타설 시각이 없거나 미래면 판단할 수 없으므로 진행 중으로 보지 않는다
+            "in_progress": age is not None and 0 <= age < ACTIVE_DAYS,
+            "design_strength_mpa": p.design_strength,
+            "strength_tests": len(p.tests),
+        })
+    return {"pours": out, "note": f"in_progress=true 는 타설 후 {ACTIVE_DAYS}일이 지나지 않은 진행 중 회차."}
 
 
 def tool_get_prediction(s: Session, pour_id: int, as_of: str | None = None) -> dict:
@@ -132,8 +143,9 @@ def tool_search_guideline(s: Session, query: str, k: int = 4) -> dict:
 TOOLS = [
     {"type": "function", "function": {
         "name": "list_pours",
-        "description": "등록된 타설 회차 목록(pour_id, 이름, 타설 시작 시각, 설계기준강도, 공시체 시험 수)을 조회한다. "
-                       "사용자가 '3회차', '테스트시험'처럼 이름으로 말하면 이것으로 pour_id 를 먼저 찾는다.",
+        "description": "등록된 타설 회차 목록(pour_id, 이름, 타설 시작 시각, 타설 후 경과일, 진행 중 여부, 설계기준강도, "
+                       "공시체 시험 수)을 조회한다. 사용자가 '3회차', '테스트시험'처럼 이름으로 말하면 이것으로 pour_id 를 "
+                       "먼저 찾는다. '진행 중·현재·지금 공사 중인 회차'를 물으면 in_progress=true 인 회차만 답한다.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
@@ -194,37 +206,78 @@ def system_prompt() -> str:
 7. 규정·절차·기준 질문은 search_guideline 으로 찾은 내용만 근거로 답하고, 답 끝에 `출처: 해체 가이드라인 p.N` 을 붙입니다.
    검색 결과에 답이 없으면 "가이드라인에서 확인할 수 없습니다"라고 말하고 일반 상식으로 채우지 않습니다.
 8. 한국어로 3~6문장, 결론을 먼저 말합니다. 시각은 '11월 7일 01:00'처럼 씁니다.
-9. 탈형·콘크리트 강도·센서·해체 규정과 관계없는 질문에는 도구를 쓰지 않고, 이 서비스의 범위를 짧게 안내합니다."""
+9. 탈형·콘크리트 강도·센서·해체 규정과 관계없는 질문에는 도구를 쓰지 않고, 이 서비스의 범위를 짧게 안내합니다.
+10. '진행 중인 회차'는 list_pours 결과에서 in_progress=true 인 회차만입니다 (타설 후 28일 이내). 없으면 없다고 말합니다.
+11. 도구를 부를 때는 "확인하겠습니다" 같은 글 없이 도구만 부릅니다. 필요한 도구는 한 번에 함께 부르고,
+    답변을 쓰기 시작했으면 도구를 다시 부르지 않습니다 (이미 조회한 결과를 다시 조회하지 않습니다)."""
 
 
 # ---------------------------------------------------------------- LLM 호출
 
-def call_llm(messages: list[dict]) -> dict:
-    """LLM 서버에 대화를 보내고 답(문장 또는 도구 호출 요청)을 받는다. 최대 90초 기다린다."""
+def call_llm_stream(messages: list[dict]):
+    """LLM 서버에 대화를 보내고 답을 조각(스트리밍)으로 받는다.
+
+    글자가 생기는 대로 {"type": "delta", "text": ...} 를 내보내고,
+    마지막에 {"type": "message", "message": 완성된 답(문장 또는 도구 호출 요청)} 을 내보낸다.
+    도구 호출 요청도 조각으로 오므로 index 별로 이어 붙여 완성한다.
+    """
     if not LLM_BASE_URL or not LLM_API_KEY:
         raise AgentError("LLM_BASE_URL / LLM_API_KEY 가 설정되지 않았습니다. webapp/.env 를 확인하세요.")
     body = json.dumps({
         "model": LLM_MODEL, "messages": messages, "tools": TOOLS,
-        "temperature": 0, "max_tokens": 800,
+        "temperature": 0, "max_tokens": 800, "stream": True,
         "chat_template_kwargs": {"enable_thinking": False},   # 생각 과정 끔 → 응답 약 4배 빠름
     }).encode()
     req = urllib.request.Request(f"{LLM_BASE_URL}/chat/completions", data=body, headers={
         "Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json",
         # 서버 앞단(Cloudflare)이 파이썬 기본 User-Agent 를 봇으로 보고 403(1010)으로 막는다
         "User-Agent": "demold-assistant/0.1"})
+    content, calls = "", {}   # calls: index → {"id", "type", "function": {"name", "arguments"}}
     try:
+        # timeout 은 조각 사이 대기 시간 (90초 동안 아무것도 안 오면 끊는다)
         with urllib.request.urlopen(req, timeout=90) as res:
-            return json.loads(res.read())["choices"][0]["message"]
+            for raw in res:                                   # 서버가 보내는 'data: {...}' 줄 (SSE)
+                line = raw.decode("utf-8").strip()
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                choices = json.loads(data).get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") or {}
+                if delta.get("content"):
+                    content += delta["content"]
+                    yield {"type": "delta", "text": delta["content"]}
+                for tc in delta.get("tool_calls") or []:
+                    c = calls.setdefault(tc.get("index", 0),
+                                         {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                    c["id"] = tc.get("id") or c["id"]
+                    fn = tc.get("function") or {}
+                    c["function"]["name"] += fn.get("name") or ""
+                    c["function"]["arguments"] += fn.get("arguments") or ""
     except urllib.error.HTTPError as e:
         raise AgentError(f"LLM 서버 오류 ({e.code})") from e
     except (urllib.error.URLError, TimeoutError) as e:
         raise AgentError("LLM 서버에 연결할 수 없습니다.") from e
+    message = {"role": "assistant", "content": content}
+    if calls:
+        message["tool_calls"] = [calls[i] for i in sorted(calls)]
+    yield {"type": "message", "message": message}
 
 
 # ---------------------------------------------------------------- 에이전트 루프
 
-def run_agent(s: Session, question: str, history: list[dict]) -> dict:
-    """질문 하나를 처리한다. 반환: {"answer": 답변, "steps": 도구 호출 기록}."""
+def run_agent_stream(s: Session, question: str, history: list[dict]):
+    """질문 하나를 처리하며 진행 상황을 하나씩 내보낸다 (화면에 바로바로 보여 주기 위해).
+
+    내보내는 것:
+      {"type": "step", "tool", "args", "ok"}  도구를 하나 실행함
+      {"type": "delta", "text"}               답변 글자 조각
+      {"type": "reset"}                       방금까지 보낸 글자는 답이 아니었음 (LLM이 말하다가 도구를 부름) → 화면에서 지움
+      {"type": "done", "answer", "steps"}     끝. answer 는 최종 답변 전체
+    """
     messages = [{"role": "system", "content": system_prompt()}]
     messages += [{"role": m["role"], "content": m["content"]} for m in history[-HISTORY_LIMIT:]
                  if m.get("role") in ("user", "assistant") and m.get("content")]
@@ -232,11 +285,20 @@ def run_agent(s: Session, question: str, history: list[dict]) -> dict:
     steps = []  # 화면에 보여 줄 도구 호출 기록
 
     for _ in range(MAX_STEPS):
-        reply = call_llm(messages)                       # ① LLM에게 묻는다
+        reply, streamed = None, False
+        for ev in call_llm_stream(messages):             # ① LLM에게 묻는다 (글자는 오는 대로 전달)
+            if ev["type"] == "delta":
+                streamed = streamed or bool(ev["text"].strip())   # 공백·줄바꿈만 온 것은 지울 필요 없음
+                yield ev
+            else:
+                reply = ev["message"]
         messages.append(reply)
         calls = reply.get("tool_calls") or []
         if not calls:                                    # ② 부를 도구가 없으면 끝
-            return {"answer": (reply.get("content") or "").strip(), "steps": steps}
+            yield {"type": "done", "answer": (reply.get("content") or "").strip(), "steps": steps}
+            return
+        if streamed:
+            yield {"type": "reset"}
 
         for call in calls:                               # ③ 요청한 도구를 우리가 실행
             name = call["function"]["name"]
@@ -249,11 +311,23 @@ def run_agent(s: Session, question: str, history: list[dict]) -> dict:
                 result = func(s, **args) if func else {"error": f"없는 도구: {name}"}
             except TypeError as e:                       # 인자를 잘못 준 경우
                 result = {"error": f"인자 오류: {e}"}
-            steps.append({"tool": name, "args": args, "ok": "error" not in result})
+            step = {"tool": name, "args": args, "ok": "error" not in result}
+            steps.append(step)
+            yield {"type": "step", **step}
             messages.append({                            # ④ 결과를 대화에 붙인다 (tool_call_id 로 짝 맞춤)
                 "role": "tool", "tool_call_id": call["id"],
                 "content": json.dumps(result, ensure_ascii=False, default=str),
             })
 
-    return {"answer": "질문을 처리하는 데 단계가 너무 많이 필요합니다. 질문을 나눠서 다시 물어봐 주세요.",
-            "steps": steps}
+    msg = "질문을 처리하는 데 단계가 너무 많이 필요합니다. 질문을 나눠서 다시 물어봐 주세요."
+    yield {"type": "reset"}
+    yield {"type": "delta", "text": msg}
+    yield {"type": "done", "answer": msg, "steps": steps}
+
+
+def run_agent(s: Session, question: str, history: list[dict]) -> dict:
+    """질문 하나를 끝까지 처리해 한 번에 돌려준다 (스트리밍이 필요 없는 곳용). 반환: {"answer", "steps"}."""
+    for ev in run_agent_stream(s, question, history):
+        if ev["type"] == "done":
+            return {"answer": ev["answer"], "steps": ev["steps"]}
+    raise AgentError("답변을 받지 못했습니다.")
