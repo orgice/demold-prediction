@@ -1,9 +1,19 @@
 // [창] 사용자 추가·수정, 삭제 확인 (사용자 관리 화면에서 열림)
 // 권한 선택(RolePicker)은 각 역할이 할 수 있는 일을 함께 보여 준다.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authApi, Role, User } from "../api/auth";
 import { ROLE_INFO, ROLE_ORDER } from "../auth/roles";
 import { ErrorBox, Modal } from "./common";
+
+/** Esc 키로 창 닫기 (작업 중이면 무시 — 취소 버튼과 같은 조건) */
+function useEscClose(onClose: () => void, busy: boolean) {
+  useEffect(() => {
+    if (busy) return;
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose, busy]);
+}
 
 /** 역할 선택: 라디오 + 역할별 설명 */
 export function RolePicker({ value, onChange, disabled, name = "role" }: {
@@ -49,6 +59,7 @@ export function UserFormModal({ user, meId, onClose, onDone }: {
     pw: resetPw && pw.length < 8 ? "8자 이상 입력해 주세요." : null,
     pw2: resetPw && pw !== pw2 ? "비밀번호가 서로 달라요." : null,
   };
+  useEscClose(onClose, busy);
   const show = (k: keyof typeof problems) => (touched ? problems[k] : null);
 
   const submit = async () => {
@@ -131,6 +142,7 @@ export function UserFormModal({ user, meId, onClose, onDone }: {
 export function DeleteUserModal({ user, onClose, onDone }: { user: User; onClose: () => void; onDone: (msg: string) => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useEscClose(onClose, busy);
   const run = async () => {
     setBusy(true);
     setErr(null);

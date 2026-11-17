@@ -439,6 +439,9 @@ tbody tr:hover { background: var(--hover); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .user-table td { vertical-align: middle; }
+/* 이름은 한 줄로, 나머지 열은 내용만큼만 (남는 폭은 이름 열이 가져감) */
+.user-table .uc-name { white-space: nowrap; min-width: 140px; width: 100%; }
+.user-table .uc-id, .user-table .uc-role, .user-table .uc-state, .user-table .uc-date, .user-table .uc-actions { width: 1%; white-space: nowrap; }
 .user-actions { justify-content: flex-end; gap: 6px; }
 .row-inactive td { color: var(--text-3); }
 .row-inactive td b { color: var(--text-2); }
@@ -470,7 +473,8 @@ tbody tr:hover { background: var(--hover); }
   .user-table td { height: auto; padding: 0; border: none; }
   .user-table .uc-id { grid-column: 1; }
   .user-table .uc-role { grid-column: 2; grid-row: 1; text-align: right; }
-  .user-table .uc-name { grid-column: 1; }
+  .user-table .uc-name { grid-column: 1; width: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .user-table .uc-id, .user-table .uc-role, .user-table .uc-state, .user-table .uc-date, .user-table .uc-actions { width: auto; }
   .user-table .uc-state { grid-column: 2; grid-row: 2; text-align: right; }
   .user-table .uc-date { grid-column: 1 / -1; }
   .user-table .uc-actions { grid-column: 1 / -1; text-align: left; margin-top: 4px; }
