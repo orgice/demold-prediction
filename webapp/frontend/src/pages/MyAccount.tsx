@@ -1,11 +1,12 @@
 // [화면] 내 계정 (/account, 로그인한 모든 사용자)
-// 본인이 ID·이름·비밀번호를 바꾼다. 권한·사용 상태는 읽기 전용 (관리자가 사용자 관리에서 바꾼다).
+// 본인이 ID·이름·비밀번호를 바꾼다. 맨 아래 '그래프 색 설정'(접힘)에서 그래프 선 색을 고른다. 권한·사용 상태는 읽기 전용 (관리자가 사용자 관리에서 바꾼다).
 // ID·비밀번호를 바꿀 때는 현재 비밀번호를 확인한다.
 // ⚠ 백엔드 미연동 목업: api/auth.ts → authMock.ts. 실제 서비스에서 ID 변경을 허용할지는 고객·백엔드 협의가 필요하다.
 import { useState } from "react";
 import { AUTH_IS_MOCK, authApi } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_INFO } from "../auth/roles";
+import GraphColorSettings from "../components/GraphColorSettings";
 
 const ID_RE = /^[a-zA-Z0-9._-]{3,32}$/;
 
@@ -132,6 +133,8 @@ export default function MyAccount() {
           <button className="btn primary" disabled={busy || !dirty} onClick={save}>{busy ? "저장 중…" : "저장"}</button>
         </div>
       </section>
+
+      <GraphColorSettings />
     </main>
   );
 }
