@@ -30,6 +30,13 @@ export interface Notice {
   at: string;
   milestones: Record<string, string | null>;
   sent: Record<string, string>;     // 알림 키별 보낸 시각
+  auto?: Record<string, string>;    // 그중 서버가 자동 발송한 알림 (backend notify.py)
+}
+
+/** 알림 메일 자동 발송 상태 (GET /api/notify/status). enabled=false 면 메일 초안만 */
+export interface NotifyStatus {
+  enabled: boolean; interval_min: number; sender: string | null;
+  last_run: string | null; last_sent: string | null; last_error: string | null; sent_count: number;
 }
 
 export type Member = "wall" | "slab";
@@ -220,9 +227,11 @@ export const api = {
     request<StrengthTest>(`/api/pours/${id}/tests/${testId}`, json("PUT", body)),
   deleteTest: (id: number, testId: number) =>
     request<void>(`/api/pours/${id}/tests/${testId}`, { method: "DELETE" }),
-  // 알림 메일 초안을 열었음을 기록 (같은 알림 반복 방지, 예측 변경 판단 기준)
+  // 알림 메일 초안을 열었음을 기록 (같은 알림 반복 방지)
   recordNotice: (id: number, body: { key: string; milestones: Record<string, string | null> }) =>
     request<Pour>(`/api/pours/${id}/notice`, json("POST", body)),
+  // 알림 메일 자동 발송 상태 (routers/notify.py)
+  notifyStatus: () => request<NotifyStatus>("/api/notify/status"),
   // 제외 구간
   exclusions: (id: number) => request<Exclusion[]>(`/api/pours/${id}/exclusions`),
   addExclusion: (id: number, body: ExclusionIn) =>

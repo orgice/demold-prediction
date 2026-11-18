@@ -2,7 +2,7 @@
 //   ① 진행 중 회차 배너·선택   ② 이전 회차 선택 (검색·전체 선택·선택 해제·개별 선택, 최대 3개)
 //   ③ 겹쳐 보기 / 회차별 보기 (회차별: 1개 = 큰 그래프, 2개 = 절반씩, 3개 = 3분의 1씩, 4개 = 기준 회차 큰 그래프 + 아래 3개)
 //      ④ 회차 요약 (현재·28일·보정) + ▸ 기준 강도 도달 예상 시점
-//   ⑤ 종 아이콘 = 강도 알림 패널 (예측 시작·변경, 도달 임박, 28일 미달 → 메일 초안. 숫자 = 아직 안 연 알림)
+//   ⑤ 종 아이콘 = 강도 알림 패널 (해체 기준 도달 하루 전 → 메일 자동 발송 또는 초안. 숫자 = 아직 안 보낸 알림)
 // 진행 중 회차 = 타설 후 28일이 지나지 않은 회차. 협력사 DB 연동 후에는 실시간 수집 회차가 된다.
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -517,11 +517,14 @@ function buildAlerts(items: Item[]): Alerts {
   return { list, failed, selected: items.length, unsent: list.filter((x) => !x.sentAt).length };
 }
 
-const ALERT_ICON: Record<AlertItem["kind"], string> = { new: "●", changed: "↻", soon: "⏰", under: "⚠" };
+const ALERT_ICON: Record<AlertItem["kind"], string> = { dayBefore: "⏰" };
 
 function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; onSent: (p: Pour) => void }) {
   const canEdit = useCanEdit();   // 받는 사람은 회차 설정(편집 권한)에서 정한다
-  // 초안을 열면 '보냄'으로 기록 → 같은 알림은 종 아이콘 숫자에서 빠지고, 다음 '예측 변경' 비교 기준이 된다
+  // 서버 SMTP 자동 발송이 켜져 있으면 받는 사람이 있는 진행 중 회차는 서버가 바로 보낸다 (backend notify.py)
+  const ns = useAsync(() => (demo ? Promise.resolve(null) : api.notifyStatus()), [demo]);
+  const auto = !!ns.data?.enabled;
+  // 초안을 열면 '보냄'으로 기록 → 같은 알림은 종 아이콘 숫자에서 빠진다
   const record = (a: AlertItem) => {
     if (demo) return;
     api.recordNotice(a.pour.id, { key: a.key, milestones: milestoneSnapshot(a.pred) }).then(onSent).catch(() => undefined);
@@ -529,8 +532,12 @@ function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; o
   return (
     <section className="card stack" aria-label="강도 알림">
       <h3>강도 알림
-        <Info align="right">메일 초안 열기를 누르면 기본 메일 앱에 받는 사람·제목·본문이 채워진 초안이 열립니다. 발송은 내용을 확인한 뒤 직접 합니다. 받는 사람은 회차 설정에서 정합니다.</Info>
+        <Info align="right">{auto
+          ? `부재 해체 기준 강도에 도달하기 하루 전에 알립니다. 서버가 ${ns.data!.interval_min}분마다 확인해, 받는 사람이 정해진 회차(타설 후 28일 이내)는 메일로 자동 발송합니다. 받는 사람이 없는 회차는 메일 초안 열기로 직접 보냅니다. 받는 사람은 회차 설정에서 정합니다.`
+          : "부재 해체 기준 강도에 도달하기 하루 전에 알립니다. 메일 초안 열기를 누르면 기본 메일 앱에 받는 사람·제목·본문이 채워진 초안이 열립니다. 발송은 내용을 확인한 뒤 직접 합니다. 받는 사람은 회차 설정에서 정합니다."}</Info>
       </h3>
+      {auto && <div className="tiny">메일 자동 발송 켜짐{ns.data!.sender ? ` · 보내는 주소 ${ns.data!.sender}` : ""}{ns.data!.last_run ? ` · 마지막 확인 ${fmtDateTime(ns.data!.last_run)}` : ""}</div>}
+      {auto && ns.data!.last_error && <div className="alert error small">자동 발송 실패: {ns.data!.last_error}. 다음 확인 때 다시 보냅니다.</div>}
       {alerts.selected === 0 && <div className="muted small">선택한 회차가 없습니다.</div>}
       {alerts.failed.length > 0 && (
         <div className="alert error small">
@@ -547,7 +554,7 @@ function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; o
             <div key={`${a.pour.id}-${a.key}`} className={`alert ${a.sentAt ? "info" : "warn"}`}>
               <div className="alert-title">
                 <span className="ico" aria-hidden="true">{ALERT_ICON[a.kind]}</span>{title(a.pour)} · {KIND_LABEL[a.kind]}
-                {a.sentAt && <span className="badge neutral badge-gap">메일 초안 {fmtDateTime(a.sentAt)}</span>}
+                {a.sentAt && <span className="badge neutral badge-gap">{a.auto ? "자동 발송" : "메일 초안"} {fmtDateTime(a.sentAt)}</span>}
               </div>
               <div className="small">{a.text}</div>
               <div className="row">

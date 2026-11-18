@@ -37,6 +37,15 @@ services:
       ADMIN_NAME: ${ADMIN_NAME:-}
       SESSION_HOURS: ${SESSION_HOURS:-12}
       SESSION_MAX_DAYS: ${SESSION_MAX_DAYS:-7}
+      SMTP_HOST: ${SMTP_HOST:-}               # 비우면 알림 메일 자동 발송 꺼짐 (화면에서 초안만)
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-FormCast}
+      NOTIFY_INTERVAL_MIN: ${NOTIFY_INTERVAL_MIN:-10}
+      APP_URL: ${APP_URL:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}   # HTTPS(caddy)로 들어온 요청은 이 값과 관계없이 HTTPS 전용 쿠키
     depends_on:
       db: {condition: service_healthy}

@@ -33,6 +33,18 @@ SEED_TEST_USERS = os.environ.get("SEED_TEST_USERS", "false").lower() == "true"
 # 다른 주소의 화면이 이 API를 부를 수 있게 허용할 주소 (쉼표 구분). 같은 주소(nginx·vite 프록시)면 필요 없다
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
+# ---- 알림 메일 자동 발송 (notify.py) ----
+# SMTP_HOST 를 비워 두면 자동 발송은 꺼지고 화면에서 메일 초안만 연다
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_SECURITY = os.environ.get("SMTP_SECURITY", "starttls").strip().lower()   # starttls(587) / ssl(465) / none(25)
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "") or {"ssl": 465, "none": 25}.get(SMTP_SECURITY, 587))
+SMTP_USER = os.environ.get("SMTP_USER", "").strip()
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "").strip() or SMTP_USER   # 보내는 주소 (비우면 SMTP_USER)
+SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "FormCast").strip()
+NOTIFY_INTERVAL_MIN = float(os.environ.get("NOTIFY_INTERVAL_MIN", "10") or 10)   # 몇 분마다 알림을 확인할지
+APP_URL = os.environ.get("APP_URL", "").strip() or "http://localhost:8080"   # 메일의 '자세히 보기' 링크 주소
+
 # ---- 데이터 정제 기준 (센서 오류값 걸러내기) ----
 PRESSURE_OUTLIER_KG = 60      # 이 값을 넘는 측압은 센서 오류 (협력사 기준)
 TEMP_MISSING = -100           # 이 값 이하 온도는 센서 미연결 (-127)

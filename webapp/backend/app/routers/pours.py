@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import criteria, maturity
+from .. import criteria, maturity, notify
 from ..db import engine, get_session
 from ..models import ExcludedRange, Pour, StrengthTest
 from ..pour_detect import detect_pour, load_pressure_minutes
@@ -220,13 +220,7 @@ def record_notice(pour_id: int, body: NoticeIn, s: Session = Depends(get_session
     """알림 메일 초안을 열었다고 기록한다. 같은 알림을 다시 띄우지 않고, 다음 '예측 변경' 판단의 기준이 된다.
     메일 발송 자체는 사용자의 메일 앱이 한다 (수행계획서: 초안 자동 작성 · 발송은 사용자)."""
     p = get_pour(s, pour_id)
-    sent = json.loads(p.notice)["sent"] if p.notice else {}
-    now = (datetime.utcnow() + timedelta(hours=9)).isoformat(timespec="seconds")   # 한국 시간 (컨테이너 시계는 UTC)
-    sent.pop(body.key, None)
-    sent[body.key] = now
-    p.notice = json.dumps({"at": now,
-                           "milestones": {k: v.isoformat() if v else None for k, v in body.milestones.items()},
-                           "sent": dict(list(sent.items())[-50:])})   # 오래된 기록은 50개까지만
+    notify.save_notice(p, [body.key], body.milestones, auto=False)
     s.commit()
     return to_out(get_pour(s, pour_id))
 
