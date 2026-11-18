@@ -536,3 +536,37 @@ a.topbar-name:hover { color: var(--accent); text-decoration: underline; text-und
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .warn-text { color: var(--warn); margin-top: 2px; }
 @media (max-width: 640px) { .fold-head { padding: 14px 16px; } .fold-body { padding: 16px; } }
+
+/* ---------- 회차 설정 › CSV 데이터 (이름 변경·삭제) ---------- */
+.csv-table td { height: auto; padding-top: 8px; padding-bottom: 8px; }
+.csv-name { min-width: 200px; }
+.csv-name input { width: 100%; height: 32px; }
+.csv-actions { justify-content: flex-end; gap: 6px; }
+.csv-del { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.csv-del dt { color: var(--text-2); }
+.csv-del dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.csv-confirm { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 20px; cursor: pointer; }
+.csv-confirm input { margin-top: 3px; flex: none; }
+
+/* 센서 데이터 › 칩 ⋮ 메뉴 (이름 변경·숨기기·삭제) */
+.chip-item { position: relative; display: inline-flex; }
+.chip-item.has-menu .chip { padding-right: 32px; }
+.chip-item.is-hidden .chip { border-style: dashed; opacity: .75; }
+.chip-menu-wrap { position: absolute; right: 3px; top: 0; bottom: 0; display: flex; align-items: center; }
+.chip-menu-wrap:has(.chip-menu) { z-index: var(--z-pop); }
+.chip-more { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; color: var(--text-2); cursor: pointer; }
+.chip-more:hover, .chip-more.on { background: var(--hover); color: var(--text); }
+.chip-menu { position: absolute; top: calc(100% + 6px); right: -3px; z-index: var(--z-pop); width: 220px; padding: 6px;
+  background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-pop); display: flex; flex-direction: column; }
+.chip-menu-head { padding: 6px 10px 8px; font-size: 13px; border-bottom: 1px solid var(--border); margin-bottom: 4px; overflow-wrap: anywhere; }
+.chip-menu > button { text-align: left; padding: 8px 10px; border: 0; border-radius: var(--radius-s, 6px); background: none;
+  font: inherit; font-size: 14px; color: var(--text); cursor: pointer; }
+.chip-menu > button:hover:not(:disabled) { background: var(--hover); }
+.chip-menu > button.danger { color: var(--bad, #C62828); }
+.chip-menu-foot { padding: 6px 10px 2px; }
+.chip-menu .stack { padding: 6px; }
+.chip-menu input { width: 100%; }
+.chip-menu-actions { justify-content: flex-end; gap: 6px; }
+.link-btn { border: 0; background: none; padding: 0 6px; color: var(--accent); cursor: pointer; text-decoration: underline; }
+@media (max-width: 760px) { .chip-more { width: 32px; height: 32px; } .chip-item.has-menu .chip { padding-right: 40px; } }

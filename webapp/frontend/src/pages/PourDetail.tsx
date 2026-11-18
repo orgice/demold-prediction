@@ -3,7 +3,7 @@
 //   강도 예측       PredictionTab  (예측 강도, 해체 가능 시각, 그래프)
 //   타설 시점 확인  PourTimeTab    (타설일 측압 그래프, 실제 타설 시각 입력)
 //   공시체 결과     TestsTab       (압축강도 시험 결과 입력)
-//   설정            SettingsTab    (기본 정보, 연결 센서, CSV 후속 데이터, 제외 구간, 회차 삭제) → PourSettings.tsx
+//   설정            SettingsTab    (기본 정보, 연결 센서, CSV 데이터 추가·이름 변경·삭제, 제외 구간, 회차 삭제) → PourSettings.tsx
 // 지금 탭은 주소 뒤 ?tab=... 에 기록돼 새로고침해도 유지된다.
 // 보기 계정: 설정 탭과 입력·수정·삭제 버튼을 숨기고 조회만 보여 준다 (useCanEdit).
 import { useMemo, useState } from "react";
