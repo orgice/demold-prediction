@@ -17,6 +17,20 @@ GRAM_SENSORS = {m.strip().upper() for m in os.environ.get("GRAM_SENSORS", "").sp
 # 화면의 센서 목록에서 숨기는 센서 MAC (쉼표 구분, 데이터는 DB에 남김). 예: 본 실험과 무관한 예비시험 장치
 HIDDEN_SENSORS = {m.strip().upper() for m in os.environ.get("HIDDEN_SENSORS", "").split(",") if m.strip()}
 
+# ---- 로그인 ----
+# 로그인 유지 시간 (시간). 마지막으로 쓴 뒤 이만큼 아무것도 안 하면 다시 로그인해야 한다 (쓰는 동안은 자동 연장)
+SESSION_HOURS = float(os.environ.get("SESSION_HOURS", "12"))
+# 계속 쓰더라도 로그인 후 이 기간(일)이 지나면 다시 로그인해야 한다
+SESSION_MAX_DAYS = float(os.environ.get("SESSION_MAX_DAYS", "7"))
+# HTTPS로 서비스할 때 true (쿠키를 HTTPS에서만 보냄). 로컬 http://localhost 에서는 false
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+# 사용자가 한 명도 없을 때 서버가 켜지면서 만드는 첫 관리자 (비워 두면 만들지 않음 → scripts.create_admin 사용)
+ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_NAME = os.environ.get("ADMIN_NAME", "관리자").strip() or "관리자"
+# 다른 주소의 화면이 이 API를 부를 수 있게 허용할 주소 (쉼표 구분). 같은 주소(nginx·vite 프록시)면 필요 없다
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
+
 # ---- 데이터 정제 기준 (센서 오류값 걸러내기) ----
 PRESSURE_OUTLIER_KG = 60      # 이 값을 넘는 측압은 센서 오류 (협력사 기준)
 TEMP_MISSING = -100           # 이 값 이하 온도는 센서 미연결 (-127)
