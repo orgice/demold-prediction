@@ -5,9 +5,11 @@
 //   공시체 결과     TestsTab       (압축강도 시험 결과 입력)
 //   설정            SettingsTab    (기본 정보, 연결 센서, CSV 후속 데이터, 제외 구간, 회차 삭제) → PourSettings.tsx
 // 지금 탭은 주소 뒤 ?tab=... 에 기록돼 새로고침해도 유지된다.
+// 보기 계정: 설정 탭과 입력·수정·삭제 버튼을 숨기고 조회만 보여 준다 (useCanEdit).
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, MEMBER_LABEL, Pour, Prediction, StrengthTest, StrengthTestIn } from "../api/client";
+import { useCanEdit } from "../auth/AuthContext";
 import { Chart, sensorColor, useChartTheme } from "../components/Chart";
 import { ErrorBox, Info, Loading, memberMilestones, MilestoneRow, targetState, useAsync } from "../components/common";
 import { StrengthChart, TempChart, testPoints } from "../components/StrengthChart";
@@ -24,7 +26,9 @@ export default function PourDetail() {
   const id = Number(useParams().id);
   const pour = useAsync(() => api.pour(id), [id]);
   const [params, setParams] = useSearchParams();
-  const tab = (TABS.find(([k]) => k === params.get("tab"))?.[0] ?? "predict") as Tab;
+  const canEdit = useCanEdit();
+  const tabs = canEdit ? TABS : TABS.filter(([k]) => k !== "settings");   // 설정 탭은 전부 편집이라 보기 계정에게 숨김
+  const tab = (tabs.find(([k]) => k === params.get("tab"))?.[0] ?? "predict") as Tab;
   const setTab = (t: Tab) => setParams(t === "predict" ? {} : { tab: t }, { replace: true });
   const [version, setVersion] = useState(0); // 저장 후 예측 다시 계산
   // 다른 탭에서 저장하면: 회차 정보를 다시 불러오고, 강도 예측도 새로 계산하게 한다
@@ -48,7 +52,7 @@ export default function PourDetail() {
         <Link to={`/assistant?pour=${p.id}`} className="btn">이 타설에 질문하기</Link>
       </div>
       <div className="tabs">
-        {TABS.map(([k, label]) => (
+        {tabs.map(([k, label]) => (
           <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
@@ -133,6 +137,7 @@ function PredictionTab({ pour, version, onTab }: { pour: Pour; version: number; 
 
 /** 상단 요약: 현재 상태 · 해당 부재 목표 시각(예상·보수적) · 보정 · 데이터 기준 시각. 입력이 필요하면 해당 탭으로 */
 function TargetSummary({ pour, pred, onTab }: { pour: Pour; pred: Prediction; onTab: (t: Tab) => void }) {
+  const canEdit = useCanEdit();
   const targets = memberMilestones(pour.member, pred.milestones);
   const calibTests = testPoints(pred, true).length;
   return (
@@ -143,7 +148,7 @@ function TargetSummary({ pour, pred, onTab }: { pour: Pour; pred: Prediction; on
             <div className="ts-label">현재 상태</div>
             <div className="ts-title">부재 미설정</div>
             <div className="small muted">부재(벽·기둥 / 슬래브)를 정하면 해당 해체 기준의 도달 예상 시각을 여기에 보여 줍니다.</div>
-            <div><button className="btn sm" onClick={() => onTab("settings")}>부재 설정하기</button></div>
+            {canEdit && <div><button className="btn sm" onClick={() => onTab("settings")}>부재 설정하기</button></div>}
           </>
         ) : targets.map((m) => {
           const st = targetState(m);
@@ -168,13 +173,13 @@ function TargetSummary({ pour, pred, onTab }: { pour: Pour; pred: Prediction; on
           <span className="tiny">보정</span>
           {pred.model.calibrated
             ? <span><span className="badge good">공시체 결과 반영됨</span> <span className="tiny">{calibTests}회</span></span>
-            : <span><span className="badge neutral">공시체 미입력</span> <button className="btn sm" onClick={() => onTab("tests")}>입력</button></span>}
+            : <span><span className="badge neutral">공시체 미입력</span>{canEdit && <> <button className="btn sm" onClick={() => onTab("tests")}>입력</button></>}</span>}
         </div>
         <div className="ts-row">
           <span className="tiny">타설 시각</span>
           {pour.pour_start
             ? <span className="badge good">확정</span>
-            : <span><span className="badge warn">미확정</span> <button className="btn sm" onClick={() => onTab("pourtime")}>확인</button></span>}
+            : <span><span className="badge warn">미확정</span>{canEdit && <> <button className="btn sm" onClick={() => onTab("pourtime")}>확인</button></>}</span>}
         </div>
         <div className="ts-row"><span className="tiny">예측 계산 기준</span><span className="small">{fmtDateTime(pred.as_of)}</span></div>
         <div className="ts-row"><span className="tiny">마지막 센서 데이터</span><span className="small">{fmtDateTime(pred.data_end)}</span></div>
@@ -188,6 +193,7 @@ function TargetSummary({ pour, pred, onTab }: { pour: Pour; pred: Prediction; on
 /** 타설 시점 확인 탭: 타설일 1분 측압 그래프(추정·확정 시각 표시) + 실제 타설 시각 입력 */
 function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   const th = useChartTheme();
+  const canEdit = useCanEdit();
   const day = useAsync(() => api.pourDay(pour.id), [pour.id, pour.detected_start, pour.pour_start]);
   const [start, setStart] = useState(toInput(pour.pour_start));
   const [end, setEnd] = useState(toInput(pour.pour_end));
@@ -240,7 +246,7 @@ function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
           <h3>타설일 측압
             <Info align="right">1분 중앙값, 60 kg 초과값은 제거했습니다. 타설 중에는 측압이 층마다 계단식으로 오르고, 끝나면 최고점 이후 서서히 내려갑니다. 짧게 튀는 값은 거푸집 설치 중 망치질일 수 있습니다.</Info>
           </h3>
-          <button className="btn sm" onClick={redetect}>자동 추정 다시 하기</button>
+          {canEdit && <button className="btn sm" onClick={redetect}>자동 추정 다시 하기</button>}
         </div>
         <div className="tiny mb-2">드래그·휠로 확대해 시작과 종료를 확인하세요.</div>
         {day.loading && <Loading />}
@@ -248,7 +254,7 @@ function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
         {option && Object.keys(day.data!.series).length > 0 ? <Chart option={option} height={400} />
           : !day.loading && <div className="alert info">이 날짜의 측압 데이터가 없습니다.</div>}
       </div>
-      <div className="card stack">
+      {canEdit && <div className="card stack">
         <h3>타설 시각 확정
           <Info align="right">실제 시각(작업일지·레미콘 송장)을 알면 입력하세요. 적산온도는 타설 시작부터 계산합니다.</Info>
         </h3>
@@ -266,7 +272,7 @@ function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
         </div>
         {msg && <div className="alert info">{msg}</div>}
         <ErrorBox error={err} />
-      </div>
+      </div>}
     </>
   );
 }
@@ -279,6 +285,7 @@ const emptyTest = (): StrengthTestIn => ({
 
 /** 공시체 결과 탭: 평균 압축강도 하나를 입력. 현장양생 결과는 이 회차 예측 보정에 쓰인다 */
 function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
+  const canEdit = useCanEdit();   // 보기 계정은 결과 목록만
   const tests = useAsync(() => api.tests(pour.id), [pour.id]);
   const [form, setForm] = useState<StrengthTestIn>(emptyTest());
   const [editing, setEditing] = useState<number | null>(null);
@@ -307,7 +314,7 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
 
   return (
     <>
-      <div className="card stack">
+      {canEdit && <div className="card stack">
         <h3>{editing ? "공시체 결과 수정" : "공시체 결과 입력"}
           <Info align="right">재령 1.6일 이하 현장양생 결과는 이 회차 예측 보정에 쓰입니다 (1일 공시체 하나로도 14 MPa 도달 시각 오차가 크게 줄어듭니다). 수중양생 결과는 기록만 하고 보정에는 쓰지 않습니다.</Info>
         </h3>
@@ -327,10 +334,10 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
           <button className="btn primary" onClick={submit}>{editing ? "수정 저장" : "추가"}</button>
         </div>
         <ErrorBox error={err} />
-      </div>
+      </div>}
       <div className="card table-wrap">
         <table>
-          <thead><tr><th>시험 일시</th><th>재령</th><th>양생</th><th>평균 압축강도 (MPa)</th><th>비고</th><th /></tr></thead>
+          <thead><tr><th>시험 일시</th><th>재령</th><th>양생</th><th>평균 압축강도 (MPa)</th><th>비고</th>{canEdit && <th />}</tr></thead>
           <tbody>
             {tests.data?.map((t) => (
               <tr key={t.id}>
@@ -339,10 +346,10 @@ function TestsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
                 <td>{t.curing === "field" ? "현장" : "수중"}</td>
                 <td><b>{t.average?.toFixed(1) ?? "—"}</b></td>
                 <td className="tiny">{t.note}</td>
-                <td className="nowrap">
+                {canEdit && <td className="nowrap">
                   <button className="btn sm" onClick={() => edit(t)}>수정</button>{" "}
                   <button className="btn sm danger" onClick={() => remove(t)}>삭제</button>
-                </td>
+                </td>}
               </tr>
             ))}
           </tbody>

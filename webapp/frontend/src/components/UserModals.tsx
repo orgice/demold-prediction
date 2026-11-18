@@ -126,7 +126,7 @@ export function UserFormModal({ user, meId, onClose, onDone }: {
             </label>
           </div>
         )}
-        {resetPw && <span className="tiny">사용자에게 따로 전달해 주세요. 목업에서는 첫 로그인 시 변경 요구를 하지 않아요.</span>}
+        {resetPw && <span className="tiny">사용자에게 따로 전달해 주세요. 재설정하면 그 사용자의 기존 로그인은 끊겨요.</span>}
       </div>
 
       <ErrorBox error={err} />

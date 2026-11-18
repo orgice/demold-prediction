@@ -1,9 +1,8 @@
 // [화면] 사용자 관리 (/admin/users, 관리자 전용)
 // 목록·검색, 추가, 수정(이름·권한·비밀번호 재설정), 삭제, 사용 중지/재개.
-// ⚠ 백엔드 미연동 목업: api/auth.ts → authMock.ts 가 브라우저 저장소로 흉내 낸다.
+// 서버 API: api/auth.ts → 백엔드 routers/users.py
 import { useEffect, useState } from "react";
-import { AUTH_IS_MOCK, authApi, User } from "../api/auth";
-import { resetMockUsers } from "../api/authMock";
+import { authApi, User } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_INFO, ROLE_ORDER } from "../auth/roles";
 import { ErrorBox, Loading, useAsync } from "../components/common";
@@ -13,7 +12,7 @@ import { fmtDateTime } from "../format";
 type Dialog = { kind: "add" } | { kind: "edit"; user: User } | { kind: "delete"; user: User } | null;
 
 export default function AdminUsers() {
-  const { user: me, requireLogin, setRequireLogin, refresh } = useAuth();
+  const { user: me, refresh } = useAuth();
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const users = useAsync(() => authApi.users(query), [query]);
@@ -49,21 +48,6 @@ export default function AdminUsers() {
         <button className="btn primary" onClick={() => { setMsg(null); setDialog({ kind: "add" }); }}>+ 사용자 추가</button>
       </div>
 
-      {AUTH_IS_MOCK && (
-        <div className="alert info alert-inline">
-          <div>
-            <b>백엔드 미연동 목업</b> · 계정은 이 브라우저(localStorage)에만 저장돼요. 권한 3단계와 범위는 고객 협의 전 초안이며,
-            지금은 ‘사용자 관리’ 메뉴만 권한으로 막아요. 다른 화면의 편집 제한은 백엔드 연동 때 적용해요.
-          </div>
-          <div className="row">
-            <label className="row small check-line">
-              <input type="checkbox" checked={requireLogin} onChange={(e) => setRequireLogin(e.target.checked)} />
-              로그인 필수
-            </label>
-            <button className="btn sm" onClick={() => { resetMockUsers(); done("예시 계정으로 초기화했어요."); }}>예시 데이터로 초기화</button>
-          </div>
-        </div>
-      )}
 
       <section className="card stack">
         <div className="card-head">

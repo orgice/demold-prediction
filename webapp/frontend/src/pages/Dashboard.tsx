@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, MEMBER_LABEL, Pour, Prediction } from "../api/client";
+import { useCanEdit } from "../auth/AuthContext";
 import { ErrorBox, Info, Loading, MilestoneRow, useAsync } from "../components/common";
 import { AlertItem, alertsFor, KIND_LABEL, mailtoUrl, milestoneSnapshot, recipients } from "../components/alerts";
 import { demoData } from "../components/demo";
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const [view, setView] = useState<View>(readView);
   const [bell, setBell] = useState(false);
   const [creating, setCreating] = useState(false);
+  const canEdit = useCanEdit();   // 보기 계정에게는 '새 타설 등록'을 숨긴다
   const [preds, setPreds] = useState<Record<number, PredState>>({});
   const nav = useNavigate();
 
@@ -115,7 +117,7 @@ export default function Dashboard() {
     <main className="page">
       <DashHead demo={demo} bell={bell} count={alerts.unsent} onBell={() => setBell((b) => !b)}
         onExitDemo={() => { setDemo(false); setPreds({}); setMainSel(null); setPrev([]); }}
-        onCreate={sorted.length > 0 && !demo ? () => setCreating(true) : undefined} />
+        onCreate={sorted.length > 0 && !demo && canEdit ? () => setCreating(true) : undefined} />
       {bell && <AlertPanel alerts={alerts} demo={demo}
         onSent={(p) => pours.setData((xs) => xs?.map((x) => (x.id === p.id ? p : x)) ?? xs)} />}
       {/* 아직 메일 초안을 열지 않은 알림이 있으면 종을 열지 않아도 본문 상단에 한 줄 요약 (DESIGN.md 8장 5) */}
@@ -130,9 +132,11 @@ export default function Dashboard() {
       {sorted.length === 0 ? (
         <div className="card empty">
           <h2>등록된 타설 회차가 없습니다</h2>
-          <div className="muted small">새 타설을 등록하면 강도 예측과 기준 강도 도달 시점이 여기에 표시됩니다.</div>
+          <div className="muted small">{canEdit
+            ? "새 타설을 등록하면 강도 예측과 기준 강도 도달 시점이 여기에 표시됩니다."
+            : "타설이 등록되면 강도 예측과 기준 강도 도달 시점이 여기에 표시됩니다."}</div>
           <div className="actions center">
-            <button className="btn primary" onClick={() => setCreating(true)}>+ 새 타설 등록</button>
+            {canEdit && <button className="btn primary" onClick={() => setCreating(true)}>+ 새 타설 등록</button>}
             <Link to="/pours" className="btn">타설 이력</Link>
           </div>
         </div>
@@ -494,6 +498,7 @@ function buildAlerts(items: Item[]): Alerts {
 const ALERT_ICON: Record<AlertItem["kind"], string> = { new: "●", changed: "↻", soon: "⏰", under: "⚠" };
 
 function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; onSent: (p: Pour) => void }) {
+  const canEdit = useCanEdit();   // 받는 사람은 회차 설정(편집 권한)에서 정한다
   // 초안을 열면 '보냄'으로 기록 → 같은 알림은 종 아이콘 숫자에서 빠지고, 다음 '예측 변경' 비교 기준이 된다
   const record = (a: AlertItem) => {
     if (demo) return;
@@ -529,7 +534,7 @@ function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; o
                 </a>
                 {to.length > 0
                   ? <span className="tiny">받는 사람 {to.join(", ")}</span>
-                  : <span className="tiny">받는 사람 미설정 · {demo ? "회차 설정에서 입력" : <Link to={`/pours/${a.pour.id}?tab=settings`}>회차 설정에서 입력</Link>}</span>}
+                  : <span className="tiny">받는 사람 미설정 · {demo ? "회차 설정에서 입력" : canEdit ? <Link to={`/pours/${a.pour.id}?tab=settings`}>회차 설정에서 입력</Link> : "편집 권한이 있는 사람이 회차 설정에서 입력"}</span>}
               </div>
             </div>
           );

@@ -1,8 +1,7 @@
 // [화면] 로그인 (/login)
-// ⚠ 백엔드 미연동 목업: api/auth.ts → authMock.ts 가 브라우저 저장소로 흉내 낸다.
+// 서버 API: api/auth.ts → 백엔드 routers/auth.py (세션 쿠키)
 import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { AUTH_IS_MOCK } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Login() {
@@ -42,12 +41,6 @@ export default function Login() {
           <h1>로그인</h1>
           <div className="muted small mt-2">계정 ID와 비밀번호를 입력해 주세요.</div>
         </div>
-        {AUTH_IS_MOCK && (
-          <div className="alert info small">
-            <b>백엔드 미연동 목업</b> · 화면 확인용이에요. 계정은 이 브라우저에만 저장되고 보안 기능이 없어요.
-            예시 계정은 코드의 <code>api/authMockSeed.ts</code>에 있어요.
-          </div>
-        )}
         <label className="field">ID
           <input value={id} onChange={(e) => setId(e.target.value)} autoComplete="username" autoFocus
             disabled={busy} aria-invalid={touched && idEmpty} />

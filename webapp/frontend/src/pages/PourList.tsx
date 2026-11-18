@@ -5,11 +5,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, MEMBER_LABEL } from "../api/client";
 import { ErrorBox, Loading, MilestoneBadge, useAsync } from "../components/common";
 import NewPourModal, { pourUrl } from "../components/NewPourModal";
+import { useCanEdit } from "../auth/AuthContext";
 import { fmtAge, fmtDateTime, fmtFull } from "../format";
 
 export default function PourList() {
   const { data, error, loading } = useAsync(api.summary, []);   // 회차별 예측 요약
   const [creating, setCreating] = useState(false);              // 새 타설 등록 창이 열려 있는지
+  const canEdit = useCanEdit();                                 // 보기 계정에게는 등록 버튼을 숨긴다
   const nav = useNavigate();
   // 회차 이름 검색 (DESIGN.md 12.3)
   const [q, setQ] = useState("");
@@ -24,11 +26,11 @@ export default function PourList() {
           <h1>타설 이력</h1>
           <div className="muted small">회차별 압축강도 예측과 해체 가능 예상 시각</div>
         </div>
-        <button className="btn primary" onClick={() => setCreating(true)}>+ 새 타설 등록</button>
+        {canEdit && <button className="btn primary" onClick={() => setCreating(true)}>+ 새 타설 등록</button>}
       </div>
       <ErrorBox error={error} />
       {loading && <Loading text="예측 계산 중…" />}
-      {data?.length === 0 && <div className="alert info">등록된 회차가 없습니다. ‘새 타설 등록’으로 시작하세요.</div>}
+      {data?.length === 0 && <div className="alert info">등록된 회차가 없습니다.{canEdit && " ‘새 타설 등록’으로 시작하세요."}</div>}
       {!!data?.length && (
         <div className="list-filters">
           <input type="search" placeholder="회차명·현장 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="회차명·현장 검색" />
