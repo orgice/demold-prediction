@@ -345,7 +345,10 @@ tbody tr:hover { background: var(--hover); }
 .sum-cell { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-m); background: var(--surface-2); }
 .sum-cell .sum-head { padding-bottom: 0; border-bottom: none; }
 .sum-cell .pour-name { font-size: 15px; }
-.sep-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.sep-grid.sep-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sep-grid.sep-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1080px) { .sep-grid.sep-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .sep-grid.sep-2, .sep-grid.sep-3 { grid-template-columns: minmax(0, 1fr); } }
 .grid.kpis.kpis-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .kpis-2 .kpi, .card .kpis-2 .kpi { background: var(--surface-2); border-color: transparent; padding: 10px 12px; }
 .kpis-2 .kpi .value { font-size: 22px; line-height: 28px; }
