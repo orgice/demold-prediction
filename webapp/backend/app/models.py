@@ -20,7 +20,7 @@ pressure / moisture 테이블은 협력사 MariaDB 스키마와 컬럼명을 맞
 """
 from datetime import datetime
 
-from sqlalchemy import (BigInteger, CHAR, DateTime, Enum, Float, ForeignKey, Index, Integer,
+from sqlalchemy import (BigInteger, Boolean, CHAR, DateTime, Enum, Float, ForeignKey, Index, Integer,
                         Numeric, String, Text, func)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -99,6 +99,12 @@ class Pour(Base):
     detected_end: Mapped[datetime | None] = mapped_column(DateTime)
     design_strength: Mapped[float | None] = mapped_column(Float)    # 설계기준강도 (MPa)
     member: Mapped[str | None] = mapped_column(String(10))         # 부재 종류: wall(벽·기둥) / slab(슬래브)
+    # 해체 기준 조건 (criteria.py). structure: 슬래브 구조 형식 single(단층)/multi(다층), durable: 벽 내구성 중요
+    structure: Mapped[str | None] = mapped_column(String(10))
+    durable: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # 해체 기준 직접 입력 (MPa)과 사유. 비어 있으면 조건으로 자동 계산
+    removal_override: Mapped[float | None] = mapped_column(Float)
+    removal_override_reason: Mapped[str | None] = mapped_column(String(300))
     sensors: Mapped[str] = mapped_column(String(500), default="")   # 쉼표 구분 MAC
     note: Mapped[str | None] = mapped_column(Text)
     notify_emails: Mapped[str | None] = mapped_column(String(500))  # 알림 메일 받을 주소 (쉼표 구분)

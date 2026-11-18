@@ -13,6 +13,7 @@ from typing import Annotated, Literal
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 Member = Literal["wall", "slab"]   # 부재 종류: 벽·기둥 / 슬래브
+Structure = Literal["single", "multi"]   # 슬래브 구조 형식: 단층 / 다층 (해체 기준 계산, criteria.py)
 EMAIL = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
 
 
@@ -60,6 +61,10 @@ class PourIn(BaseModel):
     pour_end: datetime | None = None
     design_strength: float | None = Field(None, gt=0, le=200)   # 설계기준강도(MPa), 배합표 값
     member: Member | None = None                     # 부재 종류
+    structure: Structure | None = None               # 슬래브 구조 형식 (해체 기준 계산)
+    durable: bool = False                            # 벽: 내구성 중요 구조물 (기준 10 MPa)
+    removal_override: float | None = Field(None, gt=0, le=200)   # 해체 기준 직접 입력 (MPa)
+    removal_override_reason: str | None = Field(None, max_length=300)
     sensors: list[str] = []                          # 이 회차에 쓴 센서 MAC 목록
     note: str | None = None
     notify_emails: Emails = None                     # 알림 메일 받을 주소 (쉼표 구분)
@@ -73,6 +78,10 @@ class PourPatch(BaseModel):
     pour_end: datetime | None = None
     design_strength: float | None = Field(None, gt=0, le=200)
     member: Member | None = None
+    structure: Structure | None = None
+    durable: bool | None = None
+    removal_override: float | None = Field(None, gt=0, le=200)
+    removal_override_reason: str | None = Field(None, max_length=300)
     sensors: list[str] | None = None
     note: str | None = None
     notify_emails: Emails = None
@@ -91,6 +100,17 @@ class NoticeOut(BaseModel):
     sent: dict[str, datetime]
 
 
+class CriterionOut(BaseModel):
+    """회차의 해체 기준 (criteria.py). strength 가 실제로 쓰는 값."""
+    strength: float
+    auto_strength: float                             # 조건으로 계산한 값
+    minimum: float                                   # 직접 입력 하한 (KCS 최소값)
+    basis: str                                       # 계산 근거 문구
+    warning: str | None                              # 입력이 더 필요할 때 안내
+    overridden: bool                                 # 직접 입력 값을 쓰는지
+    override_reason: str | None
+
+
 class PourOut(BaseModel):
     """회차 응답. detected_*는 측압으로 자동 추정한 시각, pour_*는 사람이 확정한 시각."""
     model_config = ConfigDict(from_attributes=True)
@@ -103,6 +123,11 @@ class PourOut(BaseModel):
     detected_end: datetime | None
     design_strength: float | None
     member: str | None
+    structure: str | None = None
+    durable: bool = False
+    removal_override: float | None = None
+    removal_override_reason: str | None = None
+    criterion: CriterionOut | None = None            # 해체 기준 (부재 미설정이면 없음)
     sensors: list[str]
     note: str | None
     test_count: int                                  # 입력된 공시체 시험 수

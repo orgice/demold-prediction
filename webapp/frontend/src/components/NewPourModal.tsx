@@ -174,8 +174,9 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
       <label className="field">부재 종류
         <select value={member} onChange={(e) => setMember(e.target.value as Member | "")}>
           <option value="">미지정 (5·14 MPa 모두 표시)</option>
-          {(Object.keys(MEMBER_LABEL) as Member[]).map((m) => <option key={m} value={m}>{MEMBER_LABEL[m]} ({m === "wall" ? "5" : "14"} MPa)</option>)}
+          {(Object.keys(MEMBER_LABEL) as Member[]).map((m) => <option key={m} value={m}>{MEMBER_LABEL[m]} ({m === "wall" ? "5" : "14"} MPa부터)</option>)}
         </select>
+        <span className="tiny">해체 기준은 부재·설계기준강도로 계산합니다. 구조 형식(단층/다층)과 직접 입력은 등록 후 설정 탭에서 정합니다.</span>
       </label>
       <div className="field">
         <span>센서</span>

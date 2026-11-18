@@ -401,7 +401,7 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
             <Milestones pred={pred} open={!!open[it.pour.id]} />
             <div>
               <h3>압축강도 예측 비교</h3>
-              <StrengthChart pred={pred} design={it.pour.design_strength} />
+              <StrengthChart pred={pred} />
             </div>
             <div>
               <h3>콘크리트 내부온도<Info align="right">점선은 직전 24시간 온도 패턴이 반복된다고 가정한 값입니다.</Info></h3>
@@ -416,7 +416,6 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
   // 여러 회차: 같은 경과일 축
   const ready: CompareItem[] = items.filter((i) => i.state.data)
     .map((i) => ({ pred: i.state.data!, name: i.pour.name, color: colorOf(i.pour.id) }));
-  const designs = [...new Set(items.map((i) => i.pour.design_strength).filter((d): d is number => d != null))];
   return (
     <div className="card stack loose">
       <div className="sum-grid">
@@ -431,7 +430,7 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
       </div>
       <div>
         <h3>압축강도 예측 비교<Info align="right">회차별 진한 선은 실측 온도로 계산한 강도, 옅은 점선은 예측, 점은 공시체 시험 결과입니다.</Info></h3>
-        {ready.length > 0 ? <CompareStrengthChart items={ready} design={designs.length === 1 ? designs[0] : null} /> : <Loading text="예측 계산 중…" />}
+        {ready.length > 0 ? <CompareStrengthChart items={ready} /> : <Loading text="예측 계산 중…" />}
       </div>
       {ready.length > 0 && (
         <div>
@@ -447,8 +446,8 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
 function Separate({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number) => string; demo: boolean }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   // 모든 카드의 강도 축을 맞춘다
-  const ys = items.flatMap((i) => i.state.data ? [i.state.data.strength_28d, ...i.state.data.tests.map((t) => t.fc)] : [])
-    .concat(items.map((i) => i.pour.design_strength ?? 0));
+  const ys = items.flatMap((i) => i.state.data
+    ? [i.state.data.strength_28d, ...i.state.data.tests.map((t) => t.fc), ...i.state.data.milestones.map((m) => m.threshold)] : []);
   const yMax = Math.ceil((Math.max(14, ...ys) * 1.15) / 6) * 6;
   return (
     <div className="grid sep-grid">
@@ -464,7 +463,7 @@ function Separate({ items, colorOf, demo }: { items: Item[]; colorOf: (id: numbe
                 <Milestones pred={pred} open={!!open[it.pour.id]} />
                 <div>
                   <h3 className="small">압축강도 예측</h3>
-                  <StrengthChart pred={pred} design={it.pour.design_strength} compact height={220} yMax={yMax} />
+                  <StrengthChart pred={pred} compact height={220} yMax={yMax} />
                 </div>
                 <div>
                   <h3 className="small">콘크리트 내부온도</h3>
@@ -502,7 +501,7 @@ function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; o
   // 초안을 열면 '보냄'으로 기록 → 같은 알림은 종 아이콘 숫자에서 빠지고, 다음 '예측 변경' 비교 기준이 된다
   const record = (a: AlertItem) => {
     if (demo) return;
-    api.recordNotice(a.pour.id, { key: a.key, milestones: milestoneSnapshot(a.pour, a.pred) }).then(onSent).catch(() => undefined);
+    api.recordNotice(a.pour.id, { key: a.key, milestones: milestoneSnapshot(a.pred) }).then(onSent).catch(() => undefined);
   };
   return (
     <section className="card stack" aria-label="강도 알림">
