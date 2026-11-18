@@ -28,6 +28,8 @@ COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
 ADMIN_ID = os.environ.get("ADMIN_ID", "").strip()
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ADMIN_NAME = os.environ.get("ADMIN_NAME", "관리자").strip() or "관리자"
+# 로컬 개발용: 권한별 시험 계정(test-admin·test-editor·test-viewer)을 만든다 (app/test_users.py). 실제 서비스에서는 끄기
+SEED_TEST_USERS = os.environ.get("SEED_TEST_USERS", "false").lower() == "true"
 # 다른 주소의 화면이 이 API를 부를 수 있게 허용할 주소 (쉼표 구분). 같은 주소(nginx·vite 프록시)면 필요 없다
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 

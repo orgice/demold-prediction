@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .audit import AuditMiddleware
 from .auth import current_user, editor_for_writes, ensure_first_admin
+from .test_users import ensure_test_users
 from .config import CORS_ORIGINS
 from .db import Base, engine
 from .routers import agent, audit, auth, model, pours, sensors, users
@@ -56,6 +57,7 @@ def create_tables():
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override FLOAT NULL"))
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override_reason VARCHAR(300) NULL"))
     ensure_first_admin()
+    ensure_test_users()
 
 
 @app.get("/api/health")
