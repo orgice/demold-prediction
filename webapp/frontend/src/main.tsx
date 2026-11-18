@@ -14,6 +14,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, RequireAuth, useAuth } from "./auth/AuthContext";
+import BrandLogo from "./components/BrandLogo";
 import { ROLE_INFO } from "./auth/roles";
 import AdminUsers from "./pages/AdminUsers";
 import Assistant from "./pages/Assistant";
@@ -48,7 +49,7 @@ function Shell() {
   return (
     <>
       <header className="topbar">
-        <div className="brand">거푸집 탈형 시점 예측<small>적산온도 기반</small></div>
+        <Link to="/" className="brand" aria-label="FormCast 대시보드로 이동"><BrandLogo /></Link>
         {showNav && (
           <nav className="nav">
             <NavLink to="/" end>대시보드</NavLink>

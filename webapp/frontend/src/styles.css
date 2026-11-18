@@ -65,8 +65,16 @@ b, strong { font-weight: 700; }
   min-height: 56px; padding: 0 max(24px, calc((100% - 1240px) / 2 + 24px));   /* 본문 폭에 맞춰 정렬 */
   background: var(--topbar-bg); border-bottom: 1px solid var(--border);
 }
-.brand { font-weight: 700; font-size: 16px; line-height: 24px; color: var(--text); }
-.brand small { font-weight: 500; font-size: 12px; color: var(--text-3); margin-left: 8px; }
+.brand { display: inline-flex; align-items: center; color: var(--text); }
+.brand:hover { text-decoration: none; background: none; }
+/* 로고 (3안 A 정제형) — 색은 로고 고유색 고정, BrandLogo.tsx 참고 */
+.brand-logo { display: inline-flex; align-items: center; gap: 10px; }
+.brand-logo svg { flex: none; display: block; }
+.brand-word { font-family: "Archivo", "Arial Black", "Pretendard Variable", sans-serif; font-weight: 900; font-stretch: 118%;
+  font-size: 18px; line-height: 24px; letter-spacing: 0.01em; color: #0A2A5E; }
+.brand-sub { font-weight: 500; font-size: 12px; line-height: 16px; color: var(--text-3);
+  padding-left: 10px; border-left: 1px solid var(--border-strong); }
+@media (max-width: 640px) { .brand-sub { display: none; } }
 .nav { display: flex; gap: 4px; flex-wrap: wrap; align-self: stretch; }
 .nav a { display: inline-flex; align-items: center; height: 100%; min-height: 56px; padding: 0 12px;
   color: var(--text-2); font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; }
