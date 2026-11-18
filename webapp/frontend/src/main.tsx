@@ -6,40 +6,82 @@
 //   /pours/3     회차 상세      pages/PourDetail.tsx  (3 = 회차 번호)
 //   /sensors     센서 데이터    pages/Sensors.tsx     (CSV 불러오기 포함, 예전 /upload 주소는 여기로)
 //   /assistant   AI 상담        pages/Assistant.tsx
+//   /login       로그인         pages/Login.tsx       (⚠ 백엔드 미연동 목업)
+//   /admin/users 사용자 관리    pages/AdminUsers.tsx  (관리자만 메뉴가 보임, ⚠ 목업)
+// 로그인 상태는 auth/AuthContext.tsx, 로그인 강제는 목업 단계에서 켜고 끌 수 있다 (기본 꺼짐).
 // 서버와 주고받는 함수는 api/client.ts 에 모여 있다.
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { AuthProvider, RequireAuth, useAuth } from "./auth/AuthContext";
 import BrandLogo from "./components/BrandLogo";
+import { ROLE_INFO } from "./auth/roles";
+import AdminUsers from "./pages/AdminUsers";
 import Assistant from "./pages/Assistant";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import PourDetail from "./pages/PourDetail";
 import PourList from "./pages/PourList";
 import Sensors from "./pages/Sensors";
 import "./styles.css";
 
+/** 맨 위 오른쪽: 로그인한 사용자·권한·로그아웃 (미로그인이면 로그인 링크) */
+function UserBox() {
+  const { user, ready, logout } = useAuth();
+  const nav = useNavigate();
+  const onLogin = useLocation().pathname === "/login";
+  if (!ready || (!user && onLogin)) return null;
+  if (!user) return <div className="topbar-user"><Link className="btn sm" to="/login">로그인</Link></div>;
+  return (
+    <div className="topbar-user">
+      <span className="topbar-name" title={user.id}>{user.name}</span>
+      <span className={`badge role-${user.role}`}>{ROLE_INFO[user.role].label}</span>
+      <button className="btn sm" onClick={async () => { await logout(); nav("/login"); }}>로그아웃</button>
+    </div>
+  );
+}
+
 /** 앱 전체 틀: 위쪽 메뉴 + 주소에 맞는 화면 */
+function Shell() {
+  const { user, requireLogin } = useAuth();
+  const showNav = !requireLogin || !!user;   // 로그인 강제 중 미로그인이면 메뉴를 숨긴다
+  const guard = (el: JSX.Element) => <RequireAuth>{el}</RequireAuth>;
+  return (
+    <>
+      <header className="topbar">
+        <Link to="/" className="brand" aria-label="FormCast 대시보드로 이동"><BrandLogo /></Link>
+        {showNav && (
+          <nav className="nav">
+            <NavLink to="/" end>대시보드</NavLink>
+            <NavLink to="/pours">타설 이력</NavLink>
+            <NavLink to="/sensors">센서 데이터</NavLink>
+            <NavLink to="/assistant">AI 상담</NavLink>
+            {user?.role === "admin" && <NavLink to="/admin/users">사용자 관리</NavLink>}
+          </nav>
+        )}
+        <UserBox />
+      </header>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={guard(<Dashboard />)} />
+        <Route path="/dashboard" element={guard(<Dashboard />)} />
+        <Route path="/pours" element={guard(<PourList />)} />
+        <Route path="/pours/:id" element={guard(<PourDetail />)} />
+        <Route path="/assistant" element={guard(<Assistant />)} />
+        <Route path="/sensors" element={guard(<Sensors />)} />
+        <Route path="/upload" element={<Navigate to="/sensors" replace />} />
+        <Route path="/admin/users" element={<RequireAuth role="admin"><AdminUsers /></RequireAuth>} />
+      </Routes>
+    </>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <header className="topbar">
-        <Link to="/" className="brand" aria-label="FormCast 대시보드로 이동"><BrandLogo /></Link>
-        <nav className="nav">
-          <NavLink to="/" end>대시보드</NavLink>
-          <NavLink to="/pours">타설 이력</NavLink>
-          <NavLink to="/sensors">센서 데이터</NavLink>
-          <NavLink to="/assistant">AI 상담</NavLink>
-        </nav>
-      </header>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/pours" element={<PourList />} />
-        <Route path="/pours/:id" element={<PourDetail />} />
-        <Route path="/assistant" element={<Assistant />} />
-        <Route path="/sensors" element={<Sensors />} />
-        <Route path="/upload" element={<Navigate to="/sensors" replace />} />
-      </Routes>
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>
     </BrowserRouter>
   );
 }
