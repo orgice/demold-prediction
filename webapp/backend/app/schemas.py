@@ -98,6 +98,7 @@ class NoticeOut(BaseModel):
     at: datetime
     milestones: dict[str, datetime | None]
     sent: dict[str, datetime]
+    auto: dict[str, datetime] = {}                   # 그중 서버가 자동 발송한 알림 (notify.py)
 
 
 class CriterionOut(BaseModel):

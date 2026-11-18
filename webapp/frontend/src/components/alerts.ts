@@ -1,25 +1,21 @@
-// 강도 알림과 알림 메일 초안 (수행계획서 '탈형 시점 메일 알림' [필수], 협의 7 기본안)
-//   - 메일은 자동으로 '작성'만 하고, 발송은 사용자가 메일 앱에서 확인 후 직접 한다 (SMTP 발송 없음)
+// 강도 알림과 알림 메일 초안 (수행계획서 '탈형 시점 메일 알림' [필수])
+//   - 서버에 SMTP 를 설정하면 서버가 같은 규칙으로 찾아서 자동 발송한다 (backend/app/notify.py, 규칙을 바꾸면 함께 바꾼다)
+//   - SMTP 가 없으면 메일은 자동으로 '작성'만 하고, 발송은 사용자가 메일 앱에서 확인 후 직접 한다
 //   - 메일 내용은 모두 예측 결과 숫자로 코드가 채운다 (LLM 미사용: 숫자가 틀리면 안 되는 안내문)
 //
-// 알림 4종류
-//   new     : 진행 중 회차의 예측이 처음 나왔을 때 (아직 한 번도 알리지 않음)
-//   changed : 진행 중 회차의 기준 도달 예상 시각이, 마지막으로 알린 때보다 CHANGE_HOURS 이상 달라졌을 때
-//   soon    : 진행 중 회차가 24시간 안에 기준 강도에 닿을 때
-//   under   : 28일 예측 강도가 기준보다 낮을 때
-// 진행 중 = 예측 기준 시각(마지막 데이터)이 3시간 이내 (센서 데이터가 지금 들어오는 회차)
-// 같은 알림(같은 key)은 메일 초안을 한 번 열면 '보냄'으로 기록되어 종 아이콘 숫자에서 빠진다.
+// 알림은 한 가지: 부재 해체 기준 강도에 도달하기 하루 전
+//   지금 시각이 해체 기준 도달 예상 시각의 24시간 전 이후이고, 아직 기준에 도달하지 않았을 때.
+//   기준 = 회차의 해체 기준(backend/app/criteria.py). 부재 미설정이면 벽 5·슬래브 14 MPa 각각. 설계기준강도는 알리지 않음.
+//   같은 기준은 한 번만 알린다 (해체 기준 값을 바꾸면 새 기준으로 다시 알림).
+// 같은 알림(같은 key)은 메일 초안을 열거나 서버가 자동 발송하면 '보냄'으로 기록되어 종 아이콘 숫자에서 빠진다.
 import { MEMBER_LABEL, Milestone, Pour, Prediction } from "../api/client";
 import { fmtDateTime, hoursBetween } from "../format";
 
-export const CHANGE_HOURS = 6;     // 예상 시각이 이만큼 달라지면 '예측 변경'으로 알린다
-const LIVE_HOURS = 3;
-const SOON_HOURS = 24;
+export const BEFORE_HOURS = 24;    // 해체 기준 도달 예상 시각보다 이만큼 먼저 알린다
+const STALE_HOURS = 24;            // 예상 시각이 이보다 더 지났으면 알리지 않는다 (오래된 회차)
 
-export type AlertKind = "new" | "changed" | "soon" | "under";
-export const KIND_LABEL: Record<AlertKind, string> = {
-  new: "예측 시작", changed: "예측 변경", soon: "도달 임박", under: "강도 도달 주의",
-};
+export type AlertKind = "dayBefore";
+export const KIND_LABEL: Record<AlertKind, string> = { dayBefore: "해체 기준 도달 하루 전" };
 
 export interface AlertItem {
   pour: Pour;
@@ -27,72 +23,34 @@ export interface AlertItem {
   kind: AlertKind;
   key: string;            // 같은 알림인지 판단하는 키 (보냄 기록에 쓰임)
   text: string;           // 화면·메일에 쓰는 한두 문장
-  sentAt: string | null;  // 이 알림 메일 초안을 연 시각 (없으면 아직 안 보냄)
+  sentAt: string | null;  // 이 알림 메일 초안을 연(또는 서버가 자동 발송한) 시각 (없으면 아직 안 보냄)
+  auto: boolean;          // 서버가 자동 발송했는지
 }
 
-/** 이 회차에서 알릴 기준 = 예측 결과의 기준 전부.
- *  서버가 회차 설정대로 골라 준다: 부재를 정했으면 그 부재의 해체 기준(backend/app/criteria.py), 안 정했으면 벽 5·슬래브 14 MPa.
- *  설계강도는 입력했으면 추가 */
-const targetsOf = (pred: Prediction): Milestone[] => pred.milestones;
+/** 알릴 기준 = 해체 기준 (설계기준강도 제외) */
+const targetsOf = (pred: Prediction): Milestone[] => pred.milestones.filter((m) => m.key !== "design");
 
 const nowLocal = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
 
-/** 진행 중인지: 마지막 데이터가 3시간 이내 */
-export const isLive = (pred: Prediction) => hoursBetween(pred.as_of, nowLocal()) < LIVE_HOURS;
-
-/** 알릴 기준의 도달 예상 시각 {"slab": "2026-07-05T08:50:00", ...} (보냄 기록에 함께 저장).
- *  키는 기준 종류(Milestone.key)라서, 해체 기준 값을 바꿔도 같은 기준으로 비교해 '예측 변경'을 알린다 */
+/** 기준별 도달 예상 시각 {"slab": "2026-07-05T08:50:00", ...} (보냄 기록에 함께 저장) */
 export function milestoneSnapshot(pred: Prediction): Record<string, string | null> {
   return Object.fromEntries(targetsOf(pred).map((m) => [m.key, m.expected]));
 }
 
-function shift(prev: string | null, cur: string | null) {
-  if (prev && cur) {
-    const h = hoursBetween(prev, cur);
-    return Math.abs(h) >= CHANGE_HOURS ? `${fmtDateTime(prev)} → ${fmtDateTime(cur)} (${Math.abs(Math.round(h))}시간 ${h > 0 ? "늦어짐" : "빨라짐"})` : null;
-  }
-  if (prev && !cur) return `${fmtDateTime(prev)} → 28일 내 미도달 예상`;
-  if (!prev && cur) return `28일 내 미도달 → ${fmtDateTime(cur)}`;
-  return null;
-}
-
 /** 회차 하나의 알림 목록 */
 export function alertsFor(pour: Pour, pred: Prediction): AlertItem[] {
-  const out: Omit<AlertItem, "sentAt">[] = [];
-  const ms = targetsOf(pred);
+  const now = nowLocal();
+  const out: Omit<AlertItem, "sentAt" | "auto">[] = [];
+  for (const m of targetsOf(pred)) {
+    if (m.reached_at_as_of || !m.expected) continue;
+    const h = hoursBetween(now, m.expected);   // 예상 시각까지 남은 시간
+    if (h > BEFORE_HOURS || h < -STALE_HOURS) continue;
+    const when = h >= 0 ? `약 ${Math.max(1, Math.round(h))}시간 후` : "예상 시각이 지났습니다. 공시체로 확인하세요";
+    out.push({ pour, pred, kind: "dayBefore", key: `dayBefore:${m.key}${m.threshold}`,
+      text: `${m.label} 도달 예상 ${fmtDateTime(m.expected)} (${when})${m.conservative ? `, 보수적 ${fmtDateTime(m.conservative)}` : ""}.` });
+  }
   const notice = pour.notice;
-
-  if (isLive(pred)) {
-    if (!notice) {
-      out.push({ pour, pred, kind: "new", key: "new",
-        text: `강도 예측이 나왔습니다. ${ms.map((m) => `${m.label} ${m.reached_at_as_of ? "도달" : m.expected ? `${fmtDateTime(m.expected)} 예상` : "28일 내 미도달 예상"}`).join(", ")}.` });
-    } else {
-      // 지난 기록에 없는 기준(예전 형식 기록·새로 생긴 기준)은 비교할 값이 없으므로 건너뛴다
-      const moved = ms.filter((m) => m.key in notice.milestones)
-        .map((m) => ({ m, s: shift(notice.milestones[m.key], m.expected) }))
-        .filter((x) => !x.m.reached_at_as_of && x.s);   // 이미 도달한 기준은 제외
-      if (moved.length) {
-        out.push({ pour, pred, kind: "changed",
-          key: `changed:${moved.map((x) => `${x.m.key}${x.m.threshold}@${(x.m.expected ?? "none").slice(0, 13)}`).join("|")}`,
-          text: `마지막 알림 이후 예상 시각이 바뀌었습니다. ${moved.map((x) => `${x.m.label}: ${x.s}`).join(" / ")}.` });
-      }
-    }
-    for (const m of ms) {
-      if (m.reached_at_as_of || !m.expected) continue;
-      const h = hoursBetween(pred.as_of, m.expected);
-      if (h >= 0 && h <= SOON_HOURS) {
-        out.push({ pour, pred, kind: "soon", key: `soon:${m.key}${m.threshold}`,
-          text: `${m.label} 도달 예상 ${fmtDateTime(m.expected)} (약 ${Math.max(1, Math.round(h))}시간 후)${m.conservative ? `, 보수적 ${fmtDateTime(m.conservative)}` : ""}.` });
-      }
-    }
-  }
-
-  const under = ms.map((m) => m.threshold).filter((v) => pred.strength_28d < v);
-  if (under.length) {
-    out.push({ pour, pred, kind: "under", key: `under:${under.join(",")}`,
-      text: `28일 예측 강도 ${pred.strength_28d.toFixed(1)} MPa가 ${under.map((v) => `${v} MPa`).join(", ")} 기준보다 낮습니다. 양생 관리가 필요합니다.` });
-  }
-  return out.map((a) => ({ ...a, sentAt: notice?.sent[a.key] ?? null }));
+  return out.map((a) => ({ ...a, sentAt: notice?.sent[a.key] ?? null, auto: !!notice?.auto?.[a.key] }));
 }
 
 /** 메일 받는 사람 목록 (회차 설정에서 입력) */
