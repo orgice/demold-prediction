@@ -21,6 +21,12 @@ export interface User {
 
 export interface NewUser { id: string; name: string; role: Role; password: string }
 export interface UserPatch { name?: string; role?: Role; password?: string }
+/**
+ * 내 계정 수정 (로그인한 본인). 권한·사용 상태는 바꿀 수 없다.
+ * ID·비밀번호를 바꿀 때는 current_password(현재 비밀번호) 확인이 필요하다.
+ * ⚠ 실제 서비스에서 ID 변경을 허용할지는 고객·백엔드 협의가 필요하다 (이력·감사 기록과 연결되므로).
+ */
+export interface MyAccountPatch { current_password?: string; new_id?: string; name?: string; new_password?: string }
 
 export const authApi = {
   /** 로그인. 실패하면 사유가 담긴 Error 를 던진다 */
@@ -28,6 +34,8 @@ export const authApi = {
   logout: (): Promise<void> => mockAuth.logout(),
   /** 지금 로그인한 사용자 (없으면 null) */
   me: (): Promise<User | null> => mockAuth.me(),
+  /** 내 계정 수정 (모든 역할). ID를 바꾸면 로그인 상태는 새 ID로 이어진다 */
+  updateMe: (patch: MyAccountPatch): Promise<User> => mockAuth.updateMe(patch),
 
   // ---- 사용자 관리 (관리자 전용) ----
   users: (q?: string): Promise<User[]> => mockAuth.users(q),

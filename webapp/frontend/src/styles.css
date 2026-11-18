@@ -422,6 +422,12 @@ tbody tr:hover { background: var(--hover); }
 /* ---------- 로그인 · 사용자 관리 (⚠ 백엔드 미연동 목업 화면, 2026-11-17 추가) ---------- */
 .topbar-user { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
 .topbar-name { font-size: 14px; font-weight: 600; color: var(--text); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.topbar-name:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.account-page { max-width: 760px; width: 100%; }
+.account-ro { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.account-ro > div { display: flex; flex-direction: column; gap: 6px; }
+.account-cur { max-width: calc(50% - 6px); }
+@media (max-width: 640px) { .account-cur { max-width: none; } }
 .badge.role-viewer { background: var(--press); color: var(--text-2); }
 .badge.role-editor { background: var(--good-bg); color: var(--good); }
 .badge.role-admin { background: var(--accent-bg); color: var(--accent); }

@@ -7,6 +7,7 @@
 //   /sensors     센서 데이터    pages/Sensors.tsx     (CSV 불러오기 포함, 예전 /upload 주소는 여기로)
 //   /assistant   AI 상담        pages/Assistant.tsx
 //   /login       로그인         pages/Login.tsx       (⚠ 백엔드 미연동 목업)
+//   /account     내 계정        pages/MyAccount.tsx   (로그인한 모든 사용자, 상단 이름을 누르면 이동, ⚠ 목업)
 //   /admin/users 사용자 관리    pages/AdminUsers.tsx  (관리자만 메뉴가 보임, ⚠ 목업)
 // 로그인 상태는 auth/AuthContext.tsx, 로그인 강제는 목업 단계에서 켜고 끌 수 있다 (기본 꺼짐).
 // 서버와 주고받는 함수는 api/client.ts 에 모여 있다.
@@ -18,6 +19,7 @@ import { ROLE_INFO } from "./auth/roles";
 import AdminUsers from "./pages/AdminUsers";
 import Assistant from "./pages/Assistant";
 import Login from "./pages/Login";
+import MyAccount from "./pages/MyAccount";
 import Dashboard from "./pages/Dashboard";
 import PourDetail from "./pages/PourDetail";
 import PourList from "./pages/PourList";
@@ -33,7 +35,7 @@ function UserBox() {
   if (!user) return <div className="topbar-user"><Link className="btn sm" to="/login">로그인</Link></div>;
   return (
     <div className="topbar-user">
-      <span className="topbar-name" title={user.id}>{user.name}</span>
+      <Link className="topbar-name" to="/account" title={`내 계정 (${user.id})`}>{user.name}</Link>
       <span className={`badge role-${user.role}`}>{ROLE_INFO[user.role].label}</span>
       <button className="btn sm" onClick={async () => { await logout(); nav("/login"); }}>로그아웃</button>
     </div>
@@ -69,6 +71,7 @@ function Shell() {
         <Route path="/assistant" element={guard(<Assistant />)} />
         <Route path="/sensors" element={guard(<Sensors />)} />
         <Route path="/upload" element={<Navigate to="/sensors" replace />} />
+        <Route path="/account" element={<RequireAuth role="viewer"><MyAccount /></RequireAuth>} />
         <Route path="/admin/users" element={<RequireAuth role="admin"><AdminUsers /></RequireAuth>} />
       </Routes>
     </>
