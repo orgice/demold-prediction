@@ -1,18 +1,14 @@
 // 강도·온도 그래프 (대시보드와 회차 상세에서 같이 쓴다). 화면설계서 1·3·4·9쪽.
-//   StrengthChart        회차 하나: 최초 예측(회색 점선) · 실측 기반 추정(파랑 실선) · 수정 예측(주황 점선) · 목표 강도(보라 점선)
+//   StrengthChart        회차 하나: 최초 예측(점선) · 실측 기반 추정(실선) · 수정 예측(점선) · 목표 강도(점선), 색은 사용자 설정
 //   CompareStrengthChart 여러 회차를 같은 축에: 회차별 고유 색, 실측은 진한 실선, 예측은 옅은 점선
 //   TempChart / CompareTempChart  콘크리트 내부온도
 import type { Prediction } from "../api/client";
 import { fmtAge, fmtDateTime, hoursBetween } from "../format";
 import { Chart, useChartTheme } from "./Chart";
+import { LineColors, useLineColors } from "./chartColors";
 
-/** 그래프 의미별 색 (범례와 같은 색) */
-export const LINE = {
-  initial: "#8892A0",   // 최초 예측 (점선)
-  observed: "#1D5BD6",  // 실측(관측 온도) 기반 추정 — blue
-  forecast: "#E07A00",  // 가정 온도 기반 이후 예측 — orange 점선
-  target: "#6941C6",    // 목표 강도 (5·14 MPa·설계강도) — purple
-};
+// 그래프 의미별 색은 내 계정 › 그래프 색 설정에서 고른다 → chartColors.ts
+//   기본: 최초 예측 회색 · 실측 기반 추정 파랑 · 수정 예측 주황 · 목표 강도 보라 · 온도 관측 파랑 · 온도 가정 회색
 
 // 회차 비교 색: 회차 번호(정렬 순서)에 고정. 선택을 바꿔도 같은 회차는 같은 색
 const POUR_COLORS = ["#1D5BD6", "#E07A00", "#0E9384", "#C23B7A", "#6E8B1E", "#0B8BC7", "#B42318", "#475467"];  // 보라는 목표 강도선 전용
@@ -66,9 +62,11 @@ const legendTip = {
     LEGEND_HELP[p.name] ? `<b>${p.name}</b><br/><span style="display:inline-block;max-width:260px;white-space:normal">${LEGEND_HELP[p.name]}</span>` : p.name,
 };
 
-/** 목표 강도 가로선: 벽체 5, 슬래브 14, 설계강도 */
-function targetLines(design: number | null | undefined) {
-  return [5, 14, ...(design ? [design] : [])].map((v) => ({ yAxis: v, name: `${v} MPa` }));
+/** 목표 강도 가로선: 벽체 5, 슬래브 14, 설계강도. 선마다 사용자가 고른 색 */
+function targetLines(design: number | null | undefined, c: LineColors) {
+  const lines = [{ v: 5, color: c.target5 }, { v: 14, color: c.target14 },
+    ...(design ? [{ v: design, color: c.targetDesign }] : [])];
+  return lines.map(({ v, color }) => ({ yAxis: v, name: `${v} MPa`, lineStyle: { color }, label: { color } }));
 }
 
 /** 회차 하나의 압축강도 그래프 (화면설계서 1·9쪽) */
@@ -76,6 +74,7 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
   pred: Prediction; design: number | null; height?: number; compact?: boolean; yMax?: number;
 }) {
   const th = useChartTheme();
+  const LINE = useLineColors();
   const nowX = day(hoursBetween(pred.start, pred.as_of));
   const obs = pred.series.filter((s) => s.observed);
   // 수정 예측은 실측 끝점에서 이어지게 마지막 실측점부터 그린다
@@ -131,9 +130,9 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
         data: pred.baseline.series.map((b) => [day(b.age_h), b.strength]),
         lineStyle: { width: 2, type: [8, 5], color: LINE.initial }, itemStyle: { color: LINE.initial },
       }] : []),
-      { name: "목표 강도", type: "line", data: [], itemStyle: { color: LINE.target }, lineStyle: { type: "dotted", color: LINE.target },
-        markLine: { symbol: "none", silent: true, lineStyle: { color: LINE.target, type: "dotted", width: 1 },
-          label: { show: !compact, formatter: "{b}", position: "end", color: LINE.target, fontSize: 11 }, data: targetLines(design) } },
+      { name: "목표 강도", type: "line", data: [], itemStyle: { color: LINE.target5 }, lineStyle: { type: "dotted", color: LINE.target5 },
+        markLine: { symbol: "none", silent: true, lineStyle: { type: "dotted", width: 1 },
+          label: { show: !compact, formatter: "{b}", position: "end", fontSize: 11 }, data: targetLines(design, LINE) } },
       { name: "공시체", type: "scatter", symbolSize: compact ? 7 : 10, z: 4,
         data: tests.map((t) => [day(t.age_h), t.fc]),
         itemStyle: { color: th.strong, borderColor: th.surface, borderWidth: 2 } },
@@ -147,6 +146,7 @@ export interface CompareItem { pred: Prediction; name: string; color: string }
 /** 여러 회차를 같은 경과일 축에 (화면설계서 3쪽) */
 export function CompareStrengthChart({ items, design, height = 400 }: { items: CompareItem[]; design?: number | null; height?: number }) {
   const th = useChartTheme();
+  const LINE = useLineColors();
   const series = items.flatMap(({ pred, name, color }) => {
     const done = isComplete(pred);
     const obs = pred.series.filter((s) => s.observed).map((s) => [day(s.age_h), s.strength]);
@@ -173,15 +173,15 @@ export function CompareStrengthChart({ items, design, height = 400 }: { items: C
     dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
     series: [...series,
       { name: "목표 강도", type: "line", data: [], markLine: { symbol: "none", silent: true,
-        lineStyle: { color: LINE.target, type: "dashed", width: 1 }, label: { formatter: "{b}", color: LINE.target, fontSize: 11, position: "start" },
-        data: targetLines(design) } }],
+        lineStyle: { type: "dashed", width: 1 }, label: { formatter: "{b}", fontSize: 11, position: "start" },
+        data: targetLines(design, LINE) } }],
   };
   return <Chart option={option} height={height} />;
 }
 
 /** 회차 하나의 내부온도: 실선 = 관측, 점선 = 가정 (직전 24시간 반복) */
 export function TempChart({ pred, height = 220, compact = false }: { pred: Prediction; height?: number; compact?: boolean }) {
-  const th = useChartTheme();
+  const LINE = useLineColors();
   const option = {
     grid: compact ? { left: 36, right: 12, top: 16, bottom: 24 } : undefined,
     tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ℃`) },
@@ -189,9 +189,9 @@ export function TempChart({ pred, height = 220, compact = false }: { pred: Predi
     xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: xMaxDay([pred]), interval: compact ? 14 : 7 },
     yAxis: { type: "value", name: "℃", scale: true },
     series: [
-      { name: "관측", type: "line", symbol: "none", lineStyle: { width: 1.5, color: th.accent }, itemStyle: { color: th.accent },
+      { name: "관측", type: "line", symbol: "none", lineStyle: { width: 1.5, color: LINE.tempObserved }, itemStyle: { color: LINE.tempObserved },
         data: pred.series.filter((s) => s.observed).map((s) => [day(s.age_h), s.temp]) },
-      { name: "가정", type: "line", symbol: "none", lineStyle: { width: 1.5, type: "dashed", color: th.text }, itemStyle: { color: th.text },
+      { name: "가정", type: "line", symbol: "none", lineStyle: { width: 1.5, type: "dashed", color: LINE.tempAssumed }, itemStyle: { color: LINE.tempAssumed },
         data: pred.series.filter((s) => !s.observed).map((s) => [day(s.age_h), s.temp]) },
     ],
   };

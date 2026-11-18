@@ -1,16 +1,17 @@
 // 로그인 상태를 앱 전체에 나눠 주는 곳 + 로그인·권한이 필요한 화면 감싸개.
 //
 // 로그인 강제(미로그인 시 /login 으로 보내기)는 목업 단계에서 켜고 끌 수 있다.
-//   기본값: 빌드 환경변수 VITE_REQUIRE_LOGIN=true 이면 켜짐, 없으면 꺼짐 (기존 화면 동작 유지)
+//   기본값: 켜짐. 빌드·개발 환경변수 VITE_REQUIRE_LOGIN=false 일 때만 꺼짐 (개발용 끄기 수단)
 //   사용자 관리 화면의 '로그인 필수' 스위치로 이 브라우저에서만 바꿀 수 있다 (localStorage).
+//   저장 키에 버전(v2)을 붙여, 기본값이 꺼짐이던 시절에 저장된 값은 무시한다.
 // 실제 권한 검사는 백엔드가 해야 한다. 여기서는 화면 이동만 막는다.
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { authApi, Role, User } from "../api/auth";
 import { atLeast } from "./roles";
 
-const REQUIRE_KEY = "formcast.mock.requireLogin";
-const envDefault = import.meta.env.VITE_REQUIRE_LOGIN === "true";
+const REQUIRE_KEY = "formcast.mock.requireLogin.v2";
+const envDefault = import.meta.env.VITE_REQUIRE_LOGIN !== "false";
 
 function readRequire(): boolean {
   try {

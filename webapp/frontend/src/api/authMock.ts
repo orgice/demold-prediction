@@ -1,7 +1,7 @@
 // ⚠ 백엔드 미연동 목업: 로그인·사용자 관리를 브라우저 저장소(localStorage)로 흉내 낸다.
 // 화면 동작 확인용이며 보안 기능이 없다 (비밀번호를 평문으로 저장, 누구나 개발자 도구로 바꿀 수 있음).
 // 실제 API 연동 시 auth.ts 의 authApi 가 이 파일 대신 서버를 부르게 바꾸고 이 파일은 지운다.
-import type { NewUser, Role, User, UserPatch } from "./auth";
+import type { MyAccountPatch, NewUser, Role, User, UserPatch } from "./auth";
 import { SEED_USERS } from "./authMockSeed";
 
 const USERS_KEY = "formcast.mock.users";
@@ -47,6 +47,10 @@ function requireAdmin(list: Stored[]) {
 /** 남는 활성 관리자 수 (마지막 관리자를 없애지 않도록) */
 const activeAdmins = (list: Stored[]) => list.filter((u) => u.role === "admin" && u.active).length;
 
+function checkId(id: string) {
+  if (!/^[a-zA-Z0-9._-]{3,32}$/.test(id)) throw new Error("ID는 영문·숫자·. _ - 로 3~32자여야 해요.");
+}
+
 function checkPassword(pw: string) {
   if (pw.length < 8) throw new Error("비밀번호는 8자 이상으로 입력해 주세요.");
 }
@@ -74,6 +78,33 @@ export const mockAuth = {
     return strip(u);
   },
 
+  /** 내 계정 수정. ID·비밀번호 변경은 현재 비밀번호 확인 필요. 권한·사용 상태는 손대지 않는다 */
+  async updateMe(patch: MyAccountPatch): Promise<User> {
+    await delay();
+    const list = read();
+    const me = list.find((u) => u.id === sessionId());
+    if (!me || !me.active) throw new Error("로그인이 필요해요. 다시 로그인해 주세요.");
+    const next: Stored = { ...me };
+    const newId = patch.new_id?.trim();
+    const changingId = !!newId && newId !== me.id;
+    if ((changingId || patch.new_password) && patch.current_password !== me.password) {
+      throw new Error("현재 비밀번호가 맞지 않아요.");
+    }
+    if (changingId) {
+      checkId(newId!);
+      if (list.some((u) => u.id !== me.id && u.id.toLowerCase() === newId!.toLowerCase())) throw new Error(`이미 있는 ID예요: ${newId}`);
+      next.id = newId!;
+    }
+    if (patch.name !== undefined) {
+      if (!patch.name.trim()) throw new Error("이름을 입력해 주세요.");
+      next.name = patch.name.trim();
+    }
+    if (patch.new_password) { checkPassword(patch.new_password); next.password = patch.new_password; }
+    write(list.map((u) => (u.id === me.id ? next : u)));
+    if (changingId) setSession(next.id);   // 로그인 상태를 새 ID로 이어 간다
+    return strip(next);
+  },
+
   async users(q?: string): Promise<User[]> {
     await delay();
     const list = read();
@@ -89,7 +120,7 @@ export const mockAuth = {
     const list = read();
     requireAdmin(list);
     const id = nu.id.trim();
-    if (!/^[a-zA-Z0-9._-]{3,32}$/.test(id)) throw new Error("ID는 영문·숫자·. _ - 로 3~32자여야 해요.");
+    checkId(id);
     if (list.some((u) => u.id.toLowerCase() === id.toLowerCase())) throw new Error(`이미 있는 ID예요: ${id}`);
     if (!nu.name.trim()) throw new Error("이름을 입력해 주세요.");
     if (!ROLES.includes(nu.role)) throw new Error("권한을 선택해 주세요.");
