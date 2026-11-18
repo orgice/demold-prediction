@@ -1,9 +1,9 @@
 // [화면] 내 계정 (/account, 로그인한 모든 사용자)
 // 본인이 ID·이름·비밀번호를 바꾼다. 맨 아래 '그래프 색 설정'(접힘)에서 그래프 선 색을 고른다. 권한·사용 상태는 읽기 전용 (관리자가 사용자 관리에서 바꾼다).
 // ID·비밀번호를 바꿀 때는 현재 비밀번호를 확인한다.
-// ⚠ 백엔드 미연동 목업: api/auth.ts → authMock.ts. 실제 서비스에서 ID 변경을 허용할지는 고객·백엔드 협의가 필요하다.
+// 서버 API: api/auth.ts → 백엔드 routers/auth.py (PATCH /api/auth/me). ⚠ 실제 서비스에서 ID 변경을 허용할지는 고객 협의가 필요하다.
 import { useState } from "react";
-import { AUTH_IS_MOCK, authApi } from "../api/auth";
+import { authApi } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import { ROLE_INFO } from "../auth/roles";
 import GraphColorSettings from "../components/GraphColorSettings";
@@ -68,13 +68,6 @@ export default function MyAccount() {
           <div className="muted small">로그인 ID·이름·비밀번호를 바꿀 수 있어요. 권한은 관리자에게 요청해 주세요.</div>
         </div>
       </div>
-
-      {AUTH_IS_MOCK && (
-        <div className="alert info small">
-          <b>백엔드 미연동 목업</b> · 변경 내용은 이 브라우저에만 저장돼요.
-          실제 서비스에서 ID 변경을 허용할지는 고객·백엔드와 협의 후 정해요.
-        </div>
-      )}
 
       <section className="card stack">
         <h2>권한·상태</h2>

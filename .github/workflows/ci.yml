@@ -1,7 +1,7 @@
 # PR 검사: main에 합치기 전에 충돌과 깨진 코드를 막는다.
 #   conflict  main과 충돌 없이 합쳐지는지, 충돌 표시(<<<<<<< / >>>>>>>)가 남지 않았는지
 #   frontend  main과 합친 결과로 타입 검사 + 빌드 (npm run build = tsc -b && vite build)
-#   backend   라이브러리 설치, 문법·import 검사, 빈 MariaDB로 서버를 띄워 API 응답 확인
+#   backend   라이브러리 설치, 문법·import 검사, 빈 MariaDB로 서버를 띄워 로그인 전 차단(401)·로그인 후 API 응답 확인
 # pull_request 검사는 GitHub가 만든 'PR + 최신 main 병합 결과'를 대상으로 돈다.
 # 실패한 PR의 머지를 실제로 막으려면 저장소 설정에서 main 브랜치 보호 규칙에 이 검사들을 필수로 지정한다.
 name: CI
@@ -102,6 +102,9 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=20
     env:
       DATABASE_URL: mysql+pymysql://demold:demold@127.0.0.1:3306/demold?charset=utf8mb4
+      # 빈 DB로 서버가 켜질 때 이 계정으로 첫 관리자를 만든다 (CI 전용, 실제 서비스 계정 아님)
+      ADMIN_ID: ci-admin
+      ADMIN_PASSWORD: ci-admin-pass
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -124,9 +127,22 @@ jobs:
             sleep 1
           done
           fail=0
-          for path in /api/health /api/pours /api/pours/summary; do
-            code=$(curl -s -o /tmp/body -w '%{http_code}' "http://127.0.0.1:8000$path")
-            echo "$path → $code"
+          # 로그인 없이: health 만 열려 있고 나머지는 401 로 막혀야 한다
+          for pair in "/api/health 200" "/api/pours 401" "/api/pours/summary 401"; do
+            set -- $pair
+            code=$(curl -s -o /tmp/body -w '%{http_code}' "http://127.0.0.1:8000$1")
+            echo "로그인 전 $1 → $code (기대 $2)"
+            if [ "$code" != "$2" ]; then fail=1; head -c 500 /tmp/body; echo; fi
+          done
+          # 첫 관리자(ADMIN_ID)로 로그인한 뒤 API 응답 확인
+          code=$(curl -s -c /tmp/cookies -o /tmp/body -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' -d "{\"id\":\"$ADMIN_ID\",\"password\":\"$ADMIN_PASSWORD\"}" \
+            http://127.0.0.1:8000/api/auth/login)
+          echo "로그인 → $code"
+          if [ "$code" != "200" ]; then fail=1; head -c 500 /tmp/body; echo; fi
+          for path in /api/pours /api/pours/summary /api/users /api/audit; do
+            code=$(curl -s -b /tmp/cookies -o /tmp/body -w '%{http_code}' "http://127.0.0.1:8000$path")
+            echo "로그인 후 $path → $code"
             if [ "$code" != "200" ]; then fail=1; head -c 500 /tmp/body; echo; fi
           done
           if [ "$fail" = 1 ]; then

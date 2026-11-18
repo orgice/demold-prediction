@@ -11,6 +11,7 @@ import { api, Pour, SeriesResponse } from "../api/client";
 import { Chart, sensorColor } from "../components/Chart";
 import { ErrorBox, Info, Loading, useAsync } from "../components/common";
 import UploadPanel from "../components/UploadPanel";
+import { useCanEdit } from "../auth/AuthContext";
 import { addHours, fmtDateTime, fmtSensorSpan, hoursBetween } from "../format";
 import type { Metric } from "../api/client";
 
@@ -29,6 +30,7 @@ const startOf = (p: Pour) => p.pour_start ?? p.detected_start;
 const dateOf = (iso: string) => iso.slice(0, 10);
 
 export default function Sensors() {
+  const canEdit = useCanEdit();   // CSV 불러오기는 편집 권한 이상만
   const sensors = useAsync(api.sensors, []);
   const pours = useAsync(api.pours, []);
   const [params, setParams] = useSearchParams();
@@ -137,7 +139,7 @@ export default function Sensors() {
               {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압"} · {fmtSensorSpan(s.first, s.last, s.buckets)}</span>
             </button>
           ))}
-          {sensors.data?.length === 0 && <span className="tiny">저장된 센서 데이터가 없습니다. 아래에서 CSV를 불러오세요.</span>}
+          {sensors.data?.length === 0 && <span className="tiny">저장된 센서 데이터가 없습니다.{canEdit && " 아래에서 CSV를 불러오세요."}</span>}
         </div>
         <ErrorBox error={rangeError} />
       </div>
@@ -170,7 +172,7 @@ export default function Sensors() {
         );
       })}
 
-      <UploadPanel onUploaded={() => { sensors.reload(); pours.reload(); }} />
+      {canEdit && <UploadPanel onUploaded={() => { sensors.reload(); pours.reload(); }} />}
     </main>
   );
 }

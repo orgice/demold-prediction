@@ -1,0 +1,11 @@
+# HTTPS 앞단 (docker compose --profile https 로 켤 때만 쓰임)
+# SITE_ADDRESS (webapp/.env):
+#   - 도메인 (예: demold.example.com)  → Let's Encrypt 인증서를 자동으로 받고 갱신한다
+#       (도메인이 이 서버를 가리키고, 80·443 포트가 인터넷에서 열려 있어야 함)
+#   - 내부 IP·localhost (예: 192.168.0.10)  → Caddy 자체 인증서. 암호화는 되지만 브라우저가 처음에 경고를 띄운다
+# http:// 로 들어오면 https:// 로 자동으로 보낸다.
+{$SITE_ADDRESS:localhost} {
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy frontend:80
+}

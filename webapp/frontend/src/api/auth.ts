@@ -1,11 +1,10 @@
 // 로그인·사용자 관리 API (화면은 이 파일의 authApi 만 부른다).
 //
-// ⚠ 현재는 백엔드 미연동 목업이다. 실제 동작은 authMock.ts 가 브라우저 저장소(localStorage)로 흉내 낸다.
-//   - 비밀번호가 브라우저에 그대로 저장되므로 보안이 전혀 없다. 화면 확인용으로만 쓴다.
-//   - 백엔드에 인증 API가 생기면 아래 authApi 의 각 함수를 client.ts 처럼 fetch 호출로 바꾸면 된다.
-//     (함수 이름·인자·반환 모양을 유지하면 화면 코드는 고치지 않아도 된다.)
-//   - 역할 3단계와 각 역할의 권한 범위는 고객 협의 전 초안이다.
-import { mockAuth } from "./authMock";
+// 백엔드: routers/auth.py (로그인·로그아웃·내 정보), routers/users.py (사용자 관리, 관리자 전용)
+// 로그인 상태는 서버가 주는 HttpOnly 쿠키로 유지된다. 화면과 API가 같은 주소(nginx·vite 프록시)라
+// 브라우저가 쿠키를 자동으로 붙여 보내므로, 다른 API 호출 코드는 따로 할 일이 없다.
+// 역할 3단계와 각 역할의 권한 범위는 고객 협의 전 초안이다.
+import { json, request } from "./client";
 
 /** 역할 3단계 (초안): 보기 < 편집 < 관리자 */
 export type Role = "viewer" | "editor" | "admin";
@@ -28,22 +27,21 @@ export interface UserPatch { name?: string; role?: Role; password?: string }
  */
 export interface MyAccountPatch { current_password?: string; new_id?: string; name?: string; new_password?: string }
 
+const enc = encodeURIComponent;
+
 export const authApi = {
   /** 로그인. 실패하면 사유가 담긴 Error 를 던진다 */
-  login: (id: string, password: string): Promise<User> => mockAuth.login(id, password),
-  logout: (): Promise<void> => mockAuth.logout(),
+  login: (id: string, password: string) => request<User>("/api/auth/login", json("POST", { id, password })),
+  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   /** 지금 로그인한 사용자 (없으면 null) */
-  me: (): Promise<User | null> => mockAuth.me(),
+  me: () => request<User | null>("/api/auth/me"),
   /** 내 계정 수정 (모든 역할). ID를 바꾸면 로그인 상태는 새 ID로 이어진다 */
-  updateMe: (patch: MyAccountPatch): Promise<User> => mockAuth.updateMe(patch),
+  updateMe: (patch: MyAccountPatch) => request<User>("/api/auth/me", json("PATCH", patch)),
 
   // ---- 사용자 관리 (관리자 전용) ----
-  users: (q?: string): Promise<User[]> => mockAuth.users(q),
-  createUser: (u: NewUser): Promise<User> => mockAuth.createUser(u),
-  updateUser: (id: string, patch: UserPatch): Promise<User> => mockAuth.updateUser(id, patch),
-  setActive: (id: string, active: boolean): Promise<User> => mockAuth.setActive(id, active),
-  deleteUser: (id: string): Promise<void> => mockAuth.deleteUser(id),
+  users: (q?: string) => request<User[]>(`/api/users${q?.trim() ? `?q=${enc(q.trim())}` : ""}`),
+  createUser: (u: NewUser) => request<User>("/api/users", json("POST", u)),
+  updateUser: (id: string, patch: UserPatch) => request<User>(`/api/users/${enc(id)}`, json("PATCH", patch)),
+  setActive: (id: string, active: boolean) => request<User>(`/api/users/${enc(id)}/active`, json("PATCH", { active })),
+  deleteUser: (id: string) => request<void>(`/api/users/${enc(id)}`, { method: "DELETE" }),
 };
-
-/** 지금 쓰는 인증 계층이 목업인지 (화면 안내 띠 표시용). 실제 API로 바꾸면 false */
-export const AUTH_IS_MOCK = true;

@@ -137,9 +137,22 @@ export interface AgentReply { answer: string; steps: AgentStep[]; elapsed_ms: nu
 /** 서버가 오류를 돌려줬을 때. message에 서버의 설명(detail)이 들어 있다 */
 export class ApiError extends Error {}
 
+/** 권한이 바뀌었을 수 있음을 알리는 신호 (auth/AuthContext.tsx 가 듣고 내 정보를 다시 불러온다) */
+export const AUTH_CHANGED_EVENT = "demold:auth-changed";
+
+/** 로그인이 끊긴 채(세션 만료·사용 중지) 다른 API를 부르면 로그인 화면으로 보낸다.
+ *  권한 부족(403)이면 그사이 권한이 바뀌었을 수 있으니 내 정보를 다시 불러오게 한다 */
+function toLoginIfExpired(path: string, res: Response) {
+  if (res.status === 401 && !path.startsWith("/api/auth/") && location.pathname !== "/login") {
+    location.assign("/login");
+  }
+  if (res.status === 403) window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+}
+
 /** 서버에 요청을 보내고 JSON 결과를 받는다. 실패하면 서버가 준 오류 문구로 ApiError를 던진다 */
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
+  toLoginIfExpired(path, res);
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
     try {
@@ -154,7 +167,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /** JSON 본문을 담은 요청 설정 (POST·PATCH·PUT용) */
-const json = (method: string, body: unknown): RequestInit => ({
+export const json = (method: string, body: unknown): RequestInit => ({
   method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
 
@@ -219,6 +232,7 @@ export type AgentEvent =
 /** AI에게 질문하고, 진행 상황·답변 글자를 오는 대로 onEvent 로 넘긴다. 서버가 error 이벤트를 보내면 ApiError 를 던진다 */
 async function askStream(question: string, history: ChatMessage[], onEvent: (e: AgentEvent) => void): Promise<void> {
   const res = await fetch("/api/agent/ask/stream", json("POST", { question, history }));
+  toLoginIfExpired("/api/agent/ask/stream", res);
   if (!res.ok || !res.body) {
     let msg = `${res.status} ${res.statusText}`;
     try { const b = await res.json(); if (typeof b.detail === "string") msg = b.detail; } catch { /* 본문 없음 */ }

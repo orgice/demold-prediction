@@ -6,10 +6,10 @@
 //   /pours/3     회차 상세      pages/PourDetail.tsx  (3 = 회차 번호)
 //   /sensors     센서 데이터    pages/Sensors.tsx     (CSV 불러오기 포함, 예전 /upload 주소는 여기로)
 //   /assistant   AI 상담        pages/Assistant.tsx
-//   /login       로그인         pages/Login.tsx       (⚠ 백엔드 미연동 목업)
-//   /account     내 계정        pages/MyAccount.tsx   (로그인한 모든 사용자, 상단 이름을 누르면 이동, ⚠ 목업)
-//   /admin/users 사용자 관리    pages/AdminUsers.tsx  (관리자만 메뉴가 보임, ⚠ 목업)
-// 로그인 상태는 auth/AuthContext.tsx, 로그인 강제는 기본 켜짐, VITE_REQUIRE_LOGIN=false 로 끌 수 있다.
+//   /login       로그인         pages/Login.tsx
+//   /account     내 계정        pages/MyAccount.tsx   (로그인한 모든 사용자, 상단 이름을 누르면 이동)
+//   /admin/users 사용자 관리    pages/AdminUsers.tsx  (관리자만 메뉴가 보임)
+// 로그인 상태는 auth/AuthContext.tsx. 로그인하지 않으면 로그인 화면만 보인다.
 // 서버와 주고받는 함수는 api/client.ts 에 모여 있다.
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -27,7 +27,7 @@ import PourList from "./pages/PourList";
 import Sensors from "./pages/Sensors";
 import "./styles.css";
 
-/** 맨 위 오른쪽: 로그인한 사용자·권한·로그아웃 (미로그인이면 로그인 링크) */
+/** 맨 위 오른쪽: 로그인한 사용자·권한·로그아웃 (미로그인이면 로그인 링크). 비밀번호는 관리자가 사용자 관리에서 바꾼다 */
 function UserBox() {
   const { user, ready, logout } = useAuth();
   const nav = useNavigate();
@@ -45,8 +45,8 @@ function UserBox() {
 
 /** 앱 전체 틀: 위쪽 메뉴 + 주소에 맞는 화면 */
 function Shell() {
-  const { user, requireLogin } = useAuth();
-  const showNav = !requireLogin || !!user;   // 로그인 강제 중 미로그인이면 메뉴를 숨긴다
+  const { user } = useAuth();
+  const showNav = !!user;   // 미로그인이면 메뉴를 숨긴다 (로그인 화면만 보임)
   const guard = (el: JSX.Element) => <RequireAuth>{el}</RequireAuth>;
   return (
     <>
@@ -74,6 +74,7 @@ function Shell() {
         <Route path="/upload" element={<Navigate to="/sensors" replace />} />
         <Route path="/account" element={<RequireAuth role="viewer"><MyAccount /></RequireAuth>} />
         <Route path="/admin/users" element={<RequireAuth role="admin"><AdminUsers /></RequireAuth>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );

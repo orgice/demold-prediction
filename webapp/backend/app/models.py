@@ -11,6 +11,10 @@ pressure / moisture 테이블은 협력사 MariaDB 스키마와 컬럼명을 맞
     strength_test  공시체 압축강도 시험 결과 (회차마다 여러 건)
     excluded_range 예측 계산에서 뺄 측정 구간 (센서 이상·탈형 작업). 원본은 그대로 둔다
     upload_log     CSV 업로드 기록
+    app_user       로그인 계정 (ID, 이름, 권한, 비밀번호 해시)
+    user_session   로그인 세션 (브라우저 쿠키 토큰의 해시, 만료 시각)
+    login_failure  로그인 실패 기록 (잠금 판단용, 하루 지나면 지움)
+    audit_log      변경 기록 (누가 언제 무엇을 바꿨는지)
 
 각 클래스가 테이블 하나이고, `컬럼명: Mapped[파이썬 타입] = mapped_column(DB 타입)` 한 줄이 컬럼 하나다.
 """
@@ -171,3 +175,46 @@ class UploadLog(Base):
     period_start: Mapped[datetime | None] = mapped_column(DateTime)
     period_end: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AppUser(Base):
+    """로그인 계정. 비밀번호는 원문 없이 해시만 저장한다 (security.py)."""
+    __tablename__ = "app_user"
+    login_id: Mapped[str] = mapped_column(String(32), primary_key=True)   # 로그인 ID (대소문자 구분 없이 하나만)
+    name: Mapped[str] = mapped_column(String(50))
+    role: Mapped[str] = mapped_column(String(10))                 # viewer(보기) / editor(편집) / admin(관리자)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    active: Mapped[bool] = mapped_column(default=True)            # False 면 사용 중지 (로그인 불가)
+    created_at: Mapped[datetime] = mapped_column(DateTime)        # 한국 현지 시각
+
+
+class UserSession(Base):
+    """로그인 세션. 토큰 원문은 브라우저 쿠키에만 있고, 여기에는 sha256 해시만 둔다."""
+    __tablename__ = "user_session"
+    token_hash: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
+    login_id: Mapped[str] = mapped_column(ForeignKey("app_user.login_id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class LoginFailure(Base):
+    """로그인 실패 한 번 = 한 줄. 잠금 판단(routers/auth.py)에 쓰고, 하루 지난 기록은 지운다."""
+    __tablename__ = "login_failure"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    login_id: Mapped[str] = mapped_column(String(64), index=True)   # 입력한 ID (소문자, 없는 ID일 수도 있음)
+    ip: Mapped[str] = mapped_column(String(45), index=True)
+
+
+class AuditLog(Base):
+    """변경 기록: 데이터를 바꾸는 요청(등록·수정·삭제·업로드·사용자 관리)과 로그인 성공·실패를 남긴다 (audit.py)."""
+    __tablename__ = "audit_log"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(DateTime, index=True)         # 한국 현지 시각
+    login_id: Mapped[str | None] = mapped_column(String(64), index=True)   # 누가 (로그인 실패면 입력한 ID)
+    ip: Mapped[str | None] = mapped_column(String(45))
+    action: Mapped[str] = mapped_column(String(50))                     # 사람이 읽는 작업 이름 (예: 회차 수정)
+    method: Mapped[str] = mapped_column(String(10))
+    path: Mapped[str] = mapped_column(String(255))                      # 대상 (예: /api/pours/3)
+    status: Mapped[int] = mapped_column(Integer)                        # 결과 (2xx 성공, 4xx 거부)
+    detail: Mapped[str | None] = mapped_column(Text)                    # 보낸 내용 (비밀번호는 가림)

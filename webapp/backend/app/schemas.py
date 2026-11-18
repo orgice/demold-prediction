@@ -148,3 +148,49 @@ class ExclusionOut(ExclusionIn):
     model_config = ConfigDict(from_attributes=True)
     id: int
     pour_id: int
+
+
+# ---- 로그인·사용자 관리 ----
+Role = Literal["viewer", "editor", "admin"]   # 보기 < 편집 < 관리자
+
+
+class LoginIn(BaseModel):
+    id: str
+    password: str
+
+
+class UserOut(BaseModel):
+    """사용자 한 명 (비밀번호는 절대 내보내지 않는다). id 는 로그인 ID."""
+    id: str
+    name: str
+    role: Role
+    active: bool
+    created_at: datetime
+
+
+class UserIn(BaseModel):
+    """사용자 추가. 형식 검사는 routers/users.py 에서 화면 문구로 한다."""
+    id: str
+    name: str
+    role: str
+    password: str
+
+
+class UserPatch(BaseModel):
+    """사용자 수정 (보낸 항목만 바뀜). password 를 보내면 비밀번호 재설정."""
+    name: str | None = None
+    role: str | None = None
+    password: str | None = None
+
+
+class ActiveIn(BaseModel):
+    active: bool
+
+
+class MyAccountPatch(BaseModel):
+    """내 계정 수정 (본인). 보낸 항목만 바뀐다. ID·비밀번호를 바꿀 때는 current_password 가 필요하다."""
+    current_password: str | None = None
+    new_id: str | None = None
+    name: str | None = None
+    new_password: str | None = None
+
