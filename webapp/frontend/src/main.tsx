@@ -9,7 +9,7 @@
 //   /login       로그인         pages/Login.tsx       (⚠ 백엔드 미연동 목업)
 //   /account     내 계정        pages/MyAccount.tsx   (로그인한 모든 사용자, 상단 이름을 누르면 이동, ⚠ 목업)
 //   /admin/users 사용자 관리    pages/AdminUsers.tsx  (관리자만 메뉴가 보임, ⚠ 목업)
-// 로그인 상태는 auth/AuthContext.tsx, 로그인 강제는 목업 단계에서 켜고 끌 수 있다 (기본 꺼짐).
+// 로그인 상태는 auth/AuthContext.tsx, 로그인 강제는 기본 켜짐, VITE_REQUIRE_LOGIN=false 로 끌 수 있다.
 // 서버와 주고받는 함수는 api/client.ts 에 모여 있다.
 import React from "react";
 import ReactDOM from "react-dom/client";

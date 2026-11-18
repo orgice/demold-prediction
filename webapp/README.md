@@ -124,8 +124,19 @@ DATABASE_URL="mysql+pymysql://demold:demold@localhost:3306/demold?charset=utf8mb
 cd frontend && npm install && npm run dev    # http://localhost:5173
 ```
 
+### 로그인 (백엔드 미연동 목업)
+
+- 처음 접속하면 로그인 화면(`/login`)이 나옵니다. 로그인하면 가려던 화면으로 돌아갑니다.
+- 계정·권한은 아직 백엔드 없이 **브라우저 저장소(localStorage)에만** 저장되는 목업입니다. 보안 기능이 없습니다.
+- 예시 계정(관리자·편집·보기): `frontend/src/api/authMockSeed.ts`
+- 로그인 없이 화면만 보려면 (개발용):
+  ```bash
+  cd frontend && VITE_REQUIRE_LOGIN=false npm run dev
+  ```
+  관리자로 로그인한 뒤 '사용자 관리' 화면의 '로그인 필수' 체크로 이 브라우저에서만 끌 수도 있습니다.
+
 ## 6. 알려진 한계 / 다음 단계
 
 - 타설 시각 자동 추정은 단순 규칙이라 틀릴 수 있습니다. 실제 시각 입력을 권장합니다.
-- 메일 알림, 로그인(권한), 협력사 DB 실시간 연동은 아직 없습니다.
+- 메일 알림, 협력사 DB 실시간 연동은 아직 없습니다. 로그인·권한은 화면만 있는 목업이며 백엔드 연동이 필요합니다.
 - 배합 정보가 회차마다 다르면 예측이 흔들립니다. 배합표가 들어오면 모델에 반영할 예정입니다.
