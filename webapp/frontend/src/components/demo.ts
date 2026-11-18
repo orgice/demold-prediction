@@ -29,17 +29,25 @@ function build(spec: DemoSpec): { pour: Pour; pred: Prediction } {
   const at = (h: number) => series[Math.min(Math.round(h), series.length - 1)];
   const asOf = at(obsHours);
   const cross = (thr: number, key: "strength" | "lower") => series.find((s) => s[key] >= thr) ?? null;
-  const milestones: Milestone[] = [[`벽체 해체 (5 MPa)`, 5], [`슬래브 해체 (14 MPa)`, 14], [`설계기준강도 (${spec.design} MPa)`, spec.design]]
-    .map(([label, thr]) => {
-      const e = cross(thr as number, "strength"), c = cross(thr as number, "lower");
-      return { label: label as string, threshold: thr as number, expected: e?.t ?? null, expected_age_h: e?.age_h ?? null,
+  // 예시는 단층 기준: 벽 5 MPa, 슬래브 max(14, 설계강도 × 2/3)
+  const removal = spec.member === "wall" ? 5 : Math.round(Math.max(14, (spec.design * 2) / 3) * 10) / 10;
+  const targets: [Milestone["key"], string, number][] = [
+    [spec.member, `${spec.member === "wall" ? "벽체" : "슬래브"} 해체 (${removal} MPa)`, removal],
+    ["design", `설계기준강도 (${spec.design} MPa)`, spec.design]];
+  const milestones: Milestone[] = targets
+    .map(([key, label, thr]) => {
+      const e = cross(thr, "strength"), c = cross(thr, "lower");
+      return { key, label, threshold: thr, expected: e?.t ?? null, expected_age_h: e?.age_h ?? null,
         conservative: c?.t ?? null, conservative_age_h: c?.age_h ?? null, observed: null, observed_age_h: null,
-        reached_at_as_of: asOf.strength >= (thr as number) };
+        reached_at_as_of: asOf.strength >= thr };
     });
   const tests = [1, 3, 7, 14, 28].filter((d) => d * 24 <= obsHours)
     .map((d, i) => ({ test_id: i + 1, t: addHours(start, d * 24), age_h: d * 24, fc: +(at(d * 24).strength * (1 + 0.05 * Math.sin(d))).toFixed(1), used_for_calibration: true }));
   const pour: Pour = { id: spec.id, name: spec.name, site: spec.site, pour_start: start, pour_end: null, detected_start: start, detected_end: null,
-    design_strength: spec.design, member: spec.member, sensors: [], note: null, test_count: tests.length };
+    design_strength: spec.design, member: spec.member, sensors: [], note: null, test_count: tests.length,
+    structure: spec.member === "slab" ? "single" : null, durable: false,
+    criterion: { strength: removal, auto_strength: removal, minimum: removal === 5 ? 5 : 14, warning: null, overridden: false, override_reason: null,
+      basis: spec.member === "wall" ? "벽·기둥 측면: 5 MPa" : `슬래브 밑면, 단층 구조: 설계기준강도 ${spec.design} × 2/3와 14 MPa 중 큰 값` } };
   const s28 = series[series.length - 1].strength;
   const pred: Prediction = {
     pour_id: spec.id, start, as_of: asOf.t, data_end: asOf.t, current_strength: asOf.strength,

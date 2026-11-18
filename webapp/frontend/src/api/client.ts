@@ -13,6 +13,11 @@ export interface Pour {
   detected_end: string | null;
   design_strength: number | null;
   member: Member | null;            // 부재 종류: wall(벽·기둥) / slab(슬래브)
+  structure?: Structure | null;     // 슬래브 구조 형식: single(단층) / multi(다층)
+  durable?: boolean;                // 벽: 내구성 중요 구조물 (기준 10 MPa)
+  removal_override?: number | null; // 해체 기준 직접 입력 (MPa)
+  removal_override_reason?: string | null;
+  criterion?: Criterion | null;     // 서버가 계산한 해체 기준 (부재 미설정이면 없음)
   sensors: string[];
   note: string | null;
   test_count: number;
@@ -20,7 +25,7 @@ export interface Pour {
   notice?: Notice | null;           // 마지막으로 보낸 알림 (없으면 아직 안 보냄)
 }
 
-/** 보낸 알림 기록: 마지막으로 보낸 시각, 그때의 기준별 예상 시각(키: "5"·"14"·설계강도), 알림 키별 보낸 시각 */
+/** 보낸 알림 기록: 마지막으로 보낸 시각, 그때의 기준별 예상 시각(키: Milestone.key, 예전 기록은 "5"·"14"), 알림 키별 보낸 시각 */
 export interface Notice {
   at: string;
   milestones: Record<string, string | null>;
@@ -29,13 +34,28 @@ export interface Notice {
 
 export type Member = "wall" | "slab";
 export const MEMBER_LABEL: Record<Member, string> = { wall: "벽·기둥", slab: "슬래브" };
+export type Structure = "single" | "multi";
+export const STRUCTURE_LABEL: Record<Structure, string> = { single: "단층 구조", multi: "다층 구조" };
+
+/** 회차의 해체 기준 (백엔드 criteria.py). strength = 실제로 쓰는 값 */
+export interface Criterion {
+  strength: number;
+  auto_strength: number;            // 조건으로 계산한 값
+  minimum: number;                  // 직접 입력 하한 (KCS 최소값)
+  basis: string;                    // 계산 근거 문구
+  warning: string | null;           // 입력이 더 필요할 때 안내
+  overridden: boolean;              // 직접 입력 값을 쓰는지
+  override_reason: string | null;
+}
 
 /** 예측 계산에서 뺀 측정 구간 (원본 데이터는 그대로) */
 export interface Exclusion { id: number; pour_id: number; start: string; end: string; reason: string | null }
 export type ExclusionIn = Omit<Exclusion, "id" | "pour_id">;
 
 /** 해체 기준 하나(벽체 5 MPa 등)의 도달 시각들. *_age_h = 타설 후 몇 시간 */
+export type MilestoneKey = "wall" | "slab" | "design";
 export interface Milestone {
+  key: MilestoneKey;                // wall·slab = 해체 기준, design = 설계기준강도
   label: string;
   threshold: number;
   expected: string | null;          // 예상 시각 (예측 곡선 기준)
@@ -62,7 +82,7 @@ export interface Prediction {
   baseline: {
     as_of: string; hours: number;
     series: { age_h: number; strength: number }[];
-    milestones: { label: string; expected: string | null; expected_age_h: number | null }[];
+    milestones: { key: MilestoneKey; label: string; expected: string | null; expected_age_h: number | null }[];
   } | null;
   // 1시간 간격 그래프 점. observed = 실측 온도 구간(true) / 가정 온도 구간(false)
   series: {

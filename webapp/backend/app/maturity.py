@@ -91,6 +91,7 @@ from scipy.optimize import curve_fit
 from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
+from . import criteria
 from .config import BASELINE_HOURS, CALIBRATION_MAX_AGE_DAY, DATUM_TEMP, FIXED_CURVE, FIXED_CURVE_SIGMA, THRESHOLDS
 
 STEP = timedelta(minutes=10)     # 계산 간격: 10분마다 한 번씩 계산 (센서 데이터도 10분 단위로 정리돼 있음)
@@ -418,9 +419,17 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
     lower, upper = S * np.exp(-Z90 * sigma), S * np.exp(Z90 * sigma)
 
     # 6) 해체 기준별 도달 시각: 예상(곡선) · 보수적(90% 하한) · 실측(공시체 사이 직선 추정)
-    thresholds = {"벽체 해체 (5 MPa)": THRESHOLDS["wall"], "슬래브 해체 (14 MPa)": THRESHOLDS["slab"]}
-    if pour.design_strength:
-        thresholds[f"설계기준강도 ({pour.design_strength:g} MPa)"] = pour.design_strength
+    #    key: 어떤 기준인지 (wall·slab = 해체 기준, design = 설계기준강도). 알림이 같은 기준을 알아보는 데 쓴다
+    #    부재를 정했으면 그 부재의 해체 기준 하나(criteria.py), 안 정했으면 벽 5·슬래브 14 MPa 최소값 둘 다
+    c = criteria.criterion(pour)
+    if c:
+        name = "벽체 해체" if pour.member == "wall" else "슬래브 해체"
+        thresholds = [(pour.member, f"{name} ({c['strength']:g} MPa)", c["strength"])]
+    else:
+        thresholds = [("wall", f"벽체 해체 ({THRESHOLDS['wall']:g} MPa)", THRESHOLDS["wall"]),
+                      ("slab", f"슬래브 해체 ({THRESHOLDS['slab']:g} MPa)", THRESHOLDS["slab"])]
+    if pour.design_strength and all(t != pour.design_strength for *_, t in thresholds):   # 다층 슬래브는 해체 기준 = 설계강도
+        thresholds.append(("design", f"설계기준강도 ({pour.design_strength:g} MPa)", pour.design_strength))
 
     def hours(t):
         """타설 후 몇 시간인지."""
@@ -432,11 +441,11 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
 
     within28 = S.index <= start + AGE_28   # 도달 시각은 28일 안에서만 찾는다 (넘으면 '28일 내 미도달')
     milestones = []
-    for label, thr in thresholds.items():
+    for key, label, thr in thresholds:
         exp, cons = first_crossing(S[within28], thr), first_crossing(lower[within28], thr)
         obs = observed_crossing(tests, thr)
         milestones.append({
-            "label": label, "threshold": thr,
+            "key": key, "label": label, "threshold": thr,
             "expected": iso(exp), "expected_age_h": hours(exp),
             "conservative": iso(cons), "conservative_age_h": hours(cons),
             "observed": iso(obs), "observed_age_h": hours(obs),
@@ -499,6 +508,6 @@ def baseline(engine: Engine, pour, all_pours: list, current: dict) -> dict | Non
         "as_of": b["as_of"],
         "hours": BASELINE_HOURS,
         "series": [{"age_h": r["age_h"], "strength": r["strength"]} for r in b["series"]],
-        "milestones": [{"label": m["label"], "expected": m["expected"], "expected_age_h": m["expected_age_h"]}
+        "milestones": [{"key": m["key"], "label": m["label"], "expected": m["expected"], "expected_age_h": m["expected_age_h"]}
                        for m in b["milestones"]],
     }

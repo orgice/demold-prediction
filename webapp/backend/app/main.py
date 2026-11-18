@@ -51,6 +51,10 @@ def create_tables():
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS member VARCHAR(10) NULL"))
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS notify_emails VARCHAR(500) NULL"))
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS notice TEXT NULL"))
+        c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS structure VARCHAR(10) NULL"))
+        c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS durable BOOLEAN NOT NULL DEFAULT 0"))
+        c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override FLOAT NULL"))
+        c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override_reason VARCHAR(300) NULL"))
     ensure_first_admin()
 
 

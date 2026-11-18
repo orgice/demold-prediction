@@ -2,7 +2,7 @@
 //   StrengthChart        회차 하나: 최초 예측(점선) · 실측 기반 추정(실선) · 수정 예측(점선) · 목표 강도(점선), 색은 사용자 설정
 //   CompareStrengthChart 여러 회차를 같은 축에: 회차별 고유 색, 실측은 진한 실선, 예측은 옅은 점선
 //   TempChart / CompareTempChart  콘크리트 내부온도
-import type { Prediction } from "../api/client";
+import type { Milestone, Prediction } from "../api/client";
 import { fmtAge, fmtDateTime, hoursBetween } from "../format";
 import { Chart, useChartTheme } from "./Chart";
 import { LineColors, useLineColors } from "./chartColors";
@@ -51,7 +51,7 @@ const LEGEND_HELP: Record<string, string> = {
   "최초 예측": "타설 후 24시간까지의 데이터로 했던 예측입니다. 지금 예측과 비교해 도달이 늦어졌는지 빨라졌는지 봅니다.",
   "실측 기반 추정": "센서가 실제로 잰 내부온도로 계산한 강도입니다. 마지막 데이터 시점까지 그립니다.",
   "수정 예측": "마지막 데이터 이후의 예측입니다. 직전 24시간 온도가 반복된다고 가정하고, 공시체 결과가 있으면 보정해 이어 그립니다.",
-  "목표 강도": "벽·기둥 측면 해체 5 MPa, 슬래브 밑면 해체 14 MPa, 그리고 입력한 설계기준강도입니다.",
+  "목표 강도": "회차 설정에 따른 해체 기준(벽·기둥 측면 5 MPa부터, 슬래브 밑면 14 MPa부터)과 입력한 설계기준강도입니다.",
   "공시체": "현장에서 깬 압축강도 시험 1회의 평균값입니다. 예측이 맞는지 확인하는 실측점입니다.",
   "관측": "센서가 실제로 잰 콘크리트 내부온도입니다.",
   "가정": "마지막 데이터 이후 온도입니다. 직전 24시간 패턴이 반복된다고 가정했습니다.",
@@ -62,16 +62,19 @@ const legendTip = {
     LEGEND_HELP[p.name] ? `<b>${p.name}</b><br/><span style="display:inline-block;max-width:260px;white-space:normal">${LEGEND_HELP[p.name]}</span>` : p.name,
 };
 
-/** 목표 강도 가로선: 벽체 5, 슬래브 14, 설계강도. 선마다 사용자가 고른 색 */
-function targetLines(design: number | null | undefined, c: LineColors) {
-  const lines = [{ v: 5, color: c.target5 }, { v: 14, color: c.target14 },
-    ...(design ? [{ v: design, color: c.targetDesign }] : [])];
-  return lines.map(({ v, color }) => ({ yAxis: v, name: `${v} MPa`, lineStyle: { color }, label: { color } }));
+/** 목표 강도 가로선: 예측 결과의 기준들 (회차 설정에 따른 해체 기준 + 설계강도). 같은 값은 한 번만. 선마다 사용자가 고른 색 */
+const LINE_KEY: Record<Milestone["key"], "target5" | "target14" | "targetDesign"> = { wall: "target5", slab: "target14", design: "targetDesign" };
+function targetLines(ms: Milestone[], c: LineColors) {
+  const seen = new Set<number>();
+  return ms.filter((m) => !seen.has(m.threshold) && !!seen.add(m.threshold)).map((m) => {
+    const color = c[LINE_KEY[m.key]];
+    return { yAxis: m.threshold, name: `${m.threshold} MPa`, lineStyle: { color }, label: { color } };
+  });
 }
 
 /** 회차 하나의 압축강도 그래프 (화면설계서 1·9쪽) */
-export function StrengthChart({ pred, design, height = 380, compact = false, yMax }: {
-  pred: Prediction; design: number | null; height?: number; compact?: boolean; yMax?: number;
+export function StrengthChart({ pred, height = 380, compact = false, yMax }: {
+  pred: Prediction; height?: number; compact?: boolean; yMax?: number;
 }) {
   const th = useChartTheme();
   const LINE = useLineColors();
@@ -132,7 +135,7 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
       }] : []),
       { name: "목표 강도", type: "line", data: [], itemStyle: { color: LINE.target5 }, lineStyle: { type: "dotted", color: LINE.target5 },
         markLine: { symbol: "none", silent: true, lineStyle: { type: "dotted", width: 1 },
-          label: { show: !compact, formatter: "{b}", position: "end", fontSize: 11 }, data: targetLines(design, LINE) } },
+          label: { show: !compact, formatter: "{b}", position: "end", fontSize: 11 }, data: targetLines(pred.milestones, LINE) } },
       { name: "공시체", type: "scatter", symbolSize: compact ? 7 : 10, z: 4,
         data: tests.map((t) => [day(t.age_h), t.fc]),
         itemStyle: { color: th.strong, borderColor: th.surface, borderWidth: 2 } },
@@ -144,7 +147,7 @@ export function StrengthChart({ pred, design, height = 380, compact = false, yMa
 export interface CompareItem { pred: Prediction; name: string; color: string }
 
 /** 여러 회차를 같은 경과일 축에 (화면설계서 3쪽) */
-export function CompareStrengthChart({ items, design, height = 400 }: { items: CompareItem[]; design?: number | null; height?: number }) {
+export function CompareStrengthChart({ items, height = 400 }: { items: CompareItem[]; height?: number }) {
   const th = useChartTheme();
   const LINE = useLineColors();
   const series = items.flatMap(({ pred, name, color }) => {
@@ -174,7 +177,7 @@ export function CompareStrengthChart({ items, design, height = 400 }: { items: C
     series: [...series,
       { name: "목표 강도", type: "line", data: [], markLine: { symbol: "none", silent: true,
         lineStyle: { type: "dashed", width: 1 }, label: { formatter: "{b}", fontSize: 11, position: "start" },
-        data: targetLines(design, LINE) } }],
+        data: targetLines(items.flatMap((i) => i.pred.milestones), LINE) } }],
   };
   return <Chart option={option} height={height} />;
 }

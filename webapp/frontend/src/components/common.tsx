@@ -65,10 +65,9 @@ export function MilestoneBadge({ m }: { m: Milestone }) {
   return <span className="badge neutral">예정</span>;
 }
 
-/** 부재 종류에 맞는 해체 기준만 고른다 (벽·기둥 5 MPa, 슬래브 14 MPa). 부재 미설정이면 빈 목록 */
+/** 부재 종류에 맞는 해체 기준만 고른다 (기준 값은 회차 설정에 따라 서버가 계산). 부재 미설정이면 빈 목록 */
 export function memberMilestones(member: Member | null, ms: Milestone[]) {
-  const t = member === "wall" ? 5 : member === "slab" ? 14 : null;
-  return t == null ? [] : ms.filter((m) => m.threshold === t);
+  return member == null ? [] : ms.filter((m) => m.key === member);
 }
 
 /** 목표 도달 상태 문구 (DESIGN.md 12.2: 구체적인 상태, 승인과 구분) */

@@ -30,21 +30,20 @@ export interface AlertItem {
   sentAt: string | null;  // 이 알림 메일 초안을 연 시각 (없으면 아직 안 보냄)
 }
 
-/** 이 회차에서 알릴 기준: 부재 종류를 정했으면 그 기준만(벽 5 / 슬래브 14), 아니면 둘 다. 설계강도는 입력했으면 추가 */
-export function targetsOf(pour: Pour): number[] {
-  const base = pour.member === "wall" ? [5] : pour.member === "slab" ? [14] : [5, 14];
-  return pour.design_strength ? [...base, pour.design_strength] : base;
-}
+/** 이 회차에서 알릴 기준 = 예측 결과의 기준 전부.
+ *  서버가 회차 설정대로 골라 준다: 부재를 정했으면 그 부재의 해체 기준(backend/app/criteria.py), 안 정했으면 벽 5·슬래브 14 MPa.
+ *  설계강도는 입력했으면 추가 */
+const targetsOf = (pred: Prediction): Milestone[] => pred.milestones;
 
 const nowLocal = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
 
 /** 진행 중인지: 마지막 데이터가 3시간 이내 */
 export const isLive = (pred: Prediction) => hoursBetween(pred.as_of, nowLocal()) < LIVE_HOURS;
 
-/** 알릴 기준의 도달 예상 시각 {"14": "2026-07-05T08:50:00", ...} (보냄 기록에 함께 저장) */
-export function milestoneSnapshot(pour: Pour, pred: Prediction): Record<string, string | null> {
-  const t = targetsOf(pour);
-  return Object.fromEntries(pred.milestones.filter((m) => t.includes(m.threshold)).map((m) => [String(m.threshold), m.expected]));
+/** 알릴 기준의 도달 예상 시각 {"slab": "2026-07-05T08:50:00", ...} (보냄 기록에 함께 저장).
+ *  키는 기준 종류(Milestone.key)라서, 해체 기준 값을 바꿔도 같은 기준으로 비교해 '예측 변경'을 알린다 */
+export function milestoneSnapshot(pred: Prediction): Record<string, string | null> {
+  return Object.fromEntries(targetsOf(pred).map((m) => [m.key, m.expected]));
 }
 
 function shift(prev: string | null, cur: string | null) {
@@ -60,8 +59,7 @@ function shift(prev: string | null, cur: string | null) {
 /** 회차 하나의 알림 목록 */
 export function alertsFor(pour: Pour, pred: Prediction): AlertItem[] {
   const out: Omit<AlertItem, "sentAt">[] = [];
-  const targets = targetsOf(pour);
-  const ms = pred.milestones.filter((m) => targets.includes(m.threshold));
+  const ms = targetsOf(pred);
   const notice = pour.notice;
 
   if (isLive(pred)) {
@@ -69,11 +67,13 @@ export function alertsFor(pour: Pour, pred: Prediction): AlertItem[] {
       out.push({ pour, pred, kind: "new", key: "new",
         text: `강도 예측이 나왔습니다. ${ms.map((m) => `${m.label} ${m.reached_at_as_of ? "도달" : m.expected ? `${fmtDateTime(m.expected)} 예상` : "28일 내 미도달 예상"}`).join(", ")}.` });
     } else {
-      const moved = ms.map((m) => ({ m, s: shift(notice.milestones[String(m.threshold)] ?? null, m.expected) }))
+      // 지난 기록에 없는 기준(예전 형식 기록·새로 생긴 기준)은 비교할 값이 없으므로 건너뛴다
+      const moved = ms.filter((m) => m.key in notice.milestones)
+        .map((m) => ({ m, s: shift(notice.milestones[m.key], m.expected) }))
         .filter((x) => !x.m.reached_at_as_of && x.s);   // 이미 도달한 기준은 제외
       if (moved.length) {
         out.push({ pour, pred, kind: "changed",
-          key: `changed:${moved.map((x) => `${x.m.threshold}@${(x.m.expected ?? "none").slice(0, 13)}`).join("|")}`,
+          key: `changed:${moved.map((x) => `${x.m.key}${x.m.threshold}@${(x.m.expected ?? "none").slice(0, 13)}`).join("|")}`,
           text: `마지막 알림 이후 예상 시각이 바뀌었습니다. ${moved.map((x) => `${x.m.label}: ${x.s}`).join(" / ")}.` });
       }
     }
@@ -81,13 +81,13 @@ export function alertsFor(pour: Pour, pred: Prediction): AlertItem[] {
       if (m.reached_at_as_of || !m.expected) continue;
       const h = hoursBetween(pred.as_of, m.expected);
       if (h >= 0 && h <= SOON_HOURS) {
-        out.push({ pour, pred, kind: "soon", key: `soon:${m.threshold}`,
+        out.push({ pour, pred, kind: "soon", key: `soon:${m.key}${m.threshold}`,
           text: `${m.label} 도달 예상 ${fmtDateTime(m.expected)} (약 ${Math.max(1, Math.round(h))}시간 후)${m.conservative ? `, 보수적 ${fmtDateTime(m.conservative)}` : ""}.` });
       }
     }
   }
 
-  const under = targets.filter((v) => pred.strength_28d < v);
+  const under = ms.map((m) => m.threshold).filter((v) => pred.strength_28d < v);
   if (under.length) {
     out.push({ pour, pred, kind: "under", key: `under:${under.join(",")}`,
       text: `28일 예측 강도 ${pred.strength_28d.toFixed(1)} MPa가 ${under.map((v) => `${v} MPa`).join(", ")} 기준보다 낮습니다. 양생 관리가 필요합니다.` });
@@ -102,7 +102,7 @@ export const recipients = (pour: Pour) => (pour.notify_emails ?? "").split(",").
 export function mailDraft(a: AlertItem, pageUrl: string) {
   const { pour, pred } = a;
   const name = [pour.name, pour.member ? MEMBER_LABEL[pour.member] : null].filter(Boolean).join(" · ");
-  const ms = pred.milestones.filter((m) => targetsOf(pour).includes(m.threshold));
+  const ms = targetsOf(pred);
   const line = (m: Milestone) => {
     if (m.reached_at_as_of) return `- ${m.label}: 도달${m.expected ? ` (${fmtDateTime(m.expected)} 무렵)` : ""}`;
     if (!m.expected) return `- ${m.label}: 28일 안에 도달하지 않을 것으로 예상`;
@@ -114,6 +114,7 @@ export function mailDraft(a: AlertItem, pageUrl: string) {
     "",
     `■ 회차: ${pour.name}${pour.site ? ` (${pour.site})` : ""}`,
     `■ 부재: ${pour.member ? MEMBER_LABEL[pour.member] : "미지정"} / 설계기준강도: ${pour.design_strength ? `${pour.design_strength} MPa` : "미입력"}`,
+    `■ 해체 기준: ${pour.criterion ? `${pour.criterion.strength} MPa (${pour.criterion.basis}${pour.criterion.overridden && pour.criterion.override_reason ? `, 사유: ${pour.criterion.override_reason}` : ""})` : "부재 미지정 (벽체 5 MPa·슬래브 14 MPa 최소값 표시)"}`,
     `■ 알림: ${a.text}`,
     "",
     `[기준별 도달 예상] 예측 기준 시각 ${fmtDateTime(pred.as_of)}`,

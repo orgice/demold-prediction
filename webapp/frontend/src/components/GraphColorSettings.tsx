@@ -30,8 +30,8 @@ const GROUPS: Group[] = [
     help: "강도 그래프의 가로 기준선입니다. 회차 비교 그래프에도 같은 색을 씁니다.",
     together: STRENGTH_KEYS,
     rows: [
-      { key: "target5", name: "5 MPa", help: "벽·기둥 측면 거푸집 해체 기준", dash: "dot" },
-      { key: "target14", name: "14 MPa", help: "슬래브 밑면 거푸집 해체 기준", dash: "dot" },
+      { key: "target5", name: "벽·기둥 기준", help: "벽·기둥 측면 거푸집 해체 기준 (5 MPa, 내구성 중요 10 MPa, 또는 직접 입력)", dash: "dot" },
+      { key: "target14", name: "슬래브 기준", help: "슬래브 밑면 거푸집 해체 기준 (14 MPa 이상, 설계기준강도·구조 형식에 따라 계산)", dash: "dot" },
       { key: "targetDesign", name: "설계기준강도", help: "회차에 입력한 설계강도 (입력한 회차만 표시)", dash: "dot" },
     ],
   },
@@ -144,7 +144,7 @@ function GraphColorBody({ id, changedCount, colors }: { id: string; changedCount
           <h3>미리보기</h3>
           <span className="badge neutral">예시 데이터</span>
         </div>
-        <StrengthChart pred={sample.pred} design={sample.pour.design_strength} height={300} />
+        <StrengthChart pred={sample.pred} height={300} />
         <TempChart pred={sample.pred} />
       </div>
 

@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import maturity
+from .. import criteria, maturity
 from ..db import engine, get_session
 from ..models import ExcludedRange, Pour, StrengthTest
 from ..pour_detect import detect_pour, load_pressure_minutes
@@ -31,7 +31,9 @@ def to_out(p: Pour) -> PourOut:
     """DB의 회차를 화면에 보낼 모양(PourOut)으로 바꾼다."""
     return PourOut(id=p.id, name=p.name, site=p.site, pour_start=p.pour_start, pour_end=p.pour_end,
                    detected_start=p.detected_start, detected_end=p.detected_end,
-                   design_strength=p.design_strength, member=p.member, sensors=p.sensor_list, note=p.note,
+                   design_strength=p.design_strength, member=p.member, structure=p.structure, durable=bool(p.durable),
+                   removal_override=p.removal_override, removal_override_reason=p.removal_override_reason,
+                   criterion=criteria.criterion(p), sensors=p.sensor_list, note=p.note,
                    test_count=len(p.tests), notify_emails=p.notify_emails,
                    notice=NoticeOut(**json.loads(p.notice)) if p.notice else None)
 
@@ -75,7 +77,11 @@ def summary(s: Session = Depends(get_session)):
 @router.post("", response_model=PourOut, status_code=201)
 def create_pour(body: PourIn, s: Session = Depends(get_session)):
     """새 회차 등록. 센서 목록은 'MAC1,MAC2' 문자열로 저장한다."""
+    if err := criteria.check_override(body.member, body.durable, body.removal_override, body.removal_override_reason):
+        raise HTTPException(422, err)
     p = Pour(**body.model_dump(exclude={"sensors"}), sensors=",".join(x.upper() for x in body.sensors))
+    if p.removal_override is None:
+        p.removal_override_reason = None
     s.add(p)
     s.commit()
     maturity.clear_cache()
@@ -95,8 +101,16 @@ def update_pour(pour_id: int, body: PourPatch, s: Session = Depends(get_session)
     data = body.model_dump(exclude_unset=True)   # 보내지 않은 항목은 빼고
     if "sensors" in data:
         data["sensors"] = ",".join(x.upper() for x in data["sensors"] or [])
+    if data.get("durable") is None:
+        data.pop("durable", None)   # durable 은 켜고 끄는 값이라 null 은 '안 바꿈'으로 본다
     for k, v in data.items():
         setattr(p, k, v)
+    if p.removal_override is None:
+        p.removal_override_reason = None   # 직접 입력이 없으면 사유도 남기지 않는다
+    # 바꾼 결과로 직접 입력 값을 다시 검사 (부재·내구성을 바꿔 최소값이 올라갈 수도 있음)
+    if err := criteria.check_override(p.member, bool(p.durable), p.removal_override, p.removal_override_reason):
+        s.rollback()
+        raise HTTPException(422, err)
     s.commit()
     maturity.clear_cache()
     return to_out(get_pour(s, pour_id))

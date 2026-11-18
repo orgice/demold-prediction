@@ -19,7 +19,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from . import guideline, maturity
+from . import criteria, guideline, maturity
 from .db import engine
 from .models import Pour
 
@@ -65,9 +65,20 @@ def tool_list_pours(s: Session) -> dict:
             # 타설 시각이 없거나 미래면 판단할 수 없으므로 진행 중으로 보지 않는다
             "in_progress": age is not None and 0 <= age < ACTIVE_DAYS,
             "design_strength_mpa": p.design_strength,
+            "member": {"wall": "벽·기둥", "slab": "슬래브"}.get(p.member or "", "미지정"),
+            "removal_criterion": _criterion(p),
             "strength_tests": len(p.tests),
         })
     return {"pours": out, "note": f"in_progress=true 는 타설 후 {ACTIVE_DAYS}일이 지나지 않은 진행 중 회차."}
+
+
+def _criterion(p) -> dict | None:
+    """회차의 해체 기준 (criteria.py). 부재 미지정이면 None."""
+    c = criteria.criterion(p)
+    if c is None:
+        return None
+    return {"strength_mpa": c["strength"], "basis": c["basis"], "warning": c["warning"],
+            "manual": c["overridden"], "manual_reason": c["override_reason"]}
 
 
 def tool_get_prediction(s: Session, pour_id: int, as_of: str | None = None) -> dict:
@@ -143,14 +154,14 @@ def tool_search_guideline(s: Session, query: str, k: int = 4) -> dict:
 TOOLS = [
     {"type": "function", "function": {
         "name": "list_pours",
-        "description": "등록된 타설 회차 목록(pour_id, 이름, 타설 시작 시각, 타설 후 경과일, 진행 중 여부, 설계기준강도, "
+        "description": "등록된 타설 회차 목록(pour_id, 이름, 타설 시작 시각, 타설 후 경과일, 진행 중 여부, 설계기준강도, 부재, 해체 기준, "
                        "공시체 시험 수)을 조회한다. 사용자가 '3회차', '테스트시험'처럼 이름으로 말하면 이것으로 pour_id 를 "
                        "먼저 찾는다. '진행 중·현재·지금 공사 중인 회차'를 물으면 in_progress=true 인 회차만 답한다.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "get_prediction",
-        "description": "한 회차의 현재 압축강도 예측, 28일 강도, 벽체 해체(5 MPa)·슬래브 해체(14 MPa)·설계기준강도 "
+        "description": "한 회차의 현재 압축강도 예측, 28일 강도, 회차별 해체 기준·설계기준강도 "
                        "도달 예상 시각과 보수적 시각을 조회한다. 강도·해체 시점 질문에는 반드시 이 도구를 쓴다.",
         "parameters": {"type": "object", "properties": {
             "pour_id": {"type": "integer", "description": "타설 회차 ID (list_pours 로 확인)"},
@@ -202,7 +213,8 @@ def system_prompt() -> str:
 3. 해체 시각은 '예상 시각'과 '보수적 시각'을 함께 알려 주고, 안전을 위해 보수적 시각을 권장합니다.
 4. 도구 결과에 error 가 있거나 정보가 없으면 지어내지 말고 "확인할 수 없습니다"라고 말한 뒤 이유를 알려 줍니다.
 5. 이미 지난 시각이면 "이미 도달했습니다"처럼 현재 시각 기준으로 말합니다.
-6. 해체 기준: 벽체 5 MPa, 슬래브 14 MPa (KCS 14 20 12). 최종 판단은 현장 책임자가 한다는 점을 필요하면 덧붙입니다.
+6. 해체 기준은 회차마다 다릅니다 (KCS 14 20 12). list_pours 의 removal_criterion(값·근거)을 따르고,
+   부재 미지정 회차는 최소값인 벽체 5 MPa·슬래브 14 MPa로 안내합니다. 최종 판단은 현장 책임자가 한다는 점을 필요하면 덧붙입니다.
 7. 규정·절차·기준 질문은 search_guideline 으로 찾은 내용만 근거로 답하고, 답 끝에 `출처: 해체 가이드라인 p.N` 을 붙입니다.
    검색 결과에 답이 없으면 "가이드라인에서 확인할 수 없습니다"라고 말하고 일반 상식으로 채우지 않습니다.
 8. 한국어로 3~6문장, 결론을 먼저 말합니다. 시각은 '11월 7일 01:00'처럼 씁니다.
