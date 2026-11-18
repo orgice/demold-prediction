@@ -10,6 +10,7 @@ uvicorn이 이 파일의 `app`을 실행한다 (backend/Dockerfile 참고).
     /api/auth...    로그인·로그아웃          (routers/auth.py)
     /api/users...   사용자 관리 (관리자)     (routers/users.py)
     /api/audit      변경 기록 (관리자)       (routers/audit.py, 기록은 audit.py)
+    /api/notify...  알림 메일 자동 발송 상태 (routers/notify.py, 발송은 notify.py)
 
 /api/health 와 /api/auth/* 말고는 모두 로그인이 필요하다 (auth.py).
 조회는 모든 권한, 회차·센서 데이터를 바꾸는 요청은 편집 권한 이상, 사용자 관리는 관리자만.
@@ -24,7 +25,8 @@ from .audit import AuditMiddleware
 from .auth import current_user, editor_for_writes, ensure_first_admin
 from .config import CORS_ORIGINS
 from .db import Base, engine
-from .routers import agent, audit, auth, model, pours, sensors, users
+from . import notify
+from .routers import agent, audit, auth, model, notify as notify_router, pours, sensors, users
 
 app = FastAPI(title="거푸집 탈형 시점 예측 API", version="0.1.0")
 # CORS: 다른 주소의 웹 화면이 로그인 쿠키를 들고 이 API를 부를 수 있게 허용할 주소 (config.CORS_ORIGINS)
@@ -40,6 +42,7 @@ app.include_router(agent.router, dependencies=[Depends(current_user)])   # AI �
 app.include_router(auth.router)
 app.include_router(users.router)                     # 관리자 검사는 routers/users.py 안에서
 app.include_router(audit.router)                     # 관리자 전용
+app.include_router(notify_router.router)             # 알림 자동 발송 상태·시험 발송 (권한 검사는 안에서)
 
 
 @app.on_event("startup")
@@ -56,6 +59,7 @@ def create_tables():
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override FLOAT NULL"))
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override_reason VARCHAR(300) NULL"))
     ensure_first_admin()
+    notify.start()   # SMTP 설정이 있으면 알림 메일 자동 발송 시작
 
 
 @app.get("/api/health")
