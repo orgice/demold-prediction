@@ -9,7 +9,8 @@
 // 서버와 주고받는 함수는 api/client.ts 에 모여 있다.
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
+import BrandLogo from "./components/BrandLogo";
 import Assistant from "./pages/Assistant";
 import Dashboard from "./pages/Dashboard";
 import PourDetail from "./pages/PourDetail";
@@ -22,7 +23,7 @@ function App() {
   return (
     <BrowserRouter>
       <header className="topbar">
-        <div className="brand">거푸집 탈형 시점 예측<small>적산온도 기반</small></div>
+        <Link to="/" className="brand" aria-label="FormCast 대시보드로 이동"><BrandLogo /></Link>
         <nav className="nav">
           <NavLink to="/" end>대시보드</NavLink>
           <NavLink to="/pours">타설 이력</NavLink>

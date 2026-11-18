@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- FormCast 심볼 (3안 A 정제형): 64 그리드, 여백 12, 패널 간격 4 -->
+  <rect width="64" height="64" fill="#0A2A5E"/>
+  <rect x="12" y="12" width="12" height="40" fill="#FFFFFF"/>
+  <rect x="28" y="12" width="24" height="12" fill="#FFFFFF"/>
+  <rect x="28" y="28" width="16" height="10" fill="#FFFFFF"/>
+  <rect x="40" y="42" width="12" height="10" fill="#1D6FD8"/>
+</svg>
