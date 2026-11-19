@@ -1,13 +1,17 @@
 // [화면] 센서 데이터 ( /sensors ) — 화면설계서 13쪽, 수행계획서 센서데이터 메뉴
 //   ① 타설 회차로 이동: 회차를 고르면 그 회차 센서와 '타설 전날 ~ 타설 후 29일'로 기간을 맞춘다
 //   ② 시작일·종료일 (45일 넘으면 1시간 평균, 최대 400일)
-//   ③ 센서 칩: MAC·종류·수집 기간을 보고 여러 센서를 켜고 끈다
+//   ③ 센서 칩: 이름(없으면 MAC)·종류·수집 기간을 보고 여러 센서를 켜고 끈다 (숨긴 센서는 빠짐, 회차 연결 센서는 숨겨도 표시)
+//   ③-1 칩 오른쪽 ⋮ 아이콘 (편집 권한): 이름 변경·숨기기·삭제. 숨긴 센서는 칩 끝 '숨긴 센서 N개'로 펼쳐 다시 보이게 함
+//        (⚠ 백엔드 미연동 목업, components/SensorChipMenu.tsx)
 //   ④ 지표별 그래프 (데이터가 없는 지표는 생략, 결측 구간은 선이 끊김)
 //   아래: 센서 데이터 불러오기 (CSV 업로드 · 새 타설 등록)
 // 주소에 ?pour=3 을 붙이면 3번 회차로 바로 연다 (회차 설정의 '원본 보기').
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, Pour, SeriesResponse } from "../api/client";
+import { api, Pour, SensorInfo, SeriesResponse } from "../api/client";
+import { sensorName, sensorsApi } from "../api/sensors";
+import { DeleteSensorModal, SensorChipMenu } from "../components/SensorChipMenu";
 import { Chart, sensorColor } from "../components/Chart";
 import { ErrorBox, Info, Loading, useAsync } from "../components/common";
 import UploadPanel from "../components/UploadPanel";
@@ -31,7 +35,7 @@ const dateOf = (iso: string) => iso.slice(0, 10);
 
 export default function Sensors() {
   const canEdit = useCanEdit();   // CSV 불러오기는 편집 권한 이상만
-  const sensors = useAsync(api.sensors, []);
+  const sensors = useAsync(sensorsApi.list, []);   // 숨긴 센서 포함 (hidden 표시)
   const pours = useAsync(api.pours, []);
   const [params, setParams] = useSearchParams();
   const [pourId, setPourId] = useState<number | null>(params.get("pour") ? Number(params.get("pour")) : null);
@@ -42,9 +46,13 @@ export default function Sensors() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [inited, setInited] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);   // 숨긴 센서 칩도 보기
+  const [note, setNote] = useState<{ text: string; error?: boolean } | null>(null);   // 칩 메뉴 결과 안내
+  const [toDelete, setToDelete] = useState<SensorInfo | null>(null);
 
   const all = sensors.data ?? [];
-  const allMacs = all.map((s) => s.mac);
+  const allMacs = all.map((s) => s.mac);                 // 색은 숨긴 센서까지 포함한 순서로 고정
+  const nameOf = (mac: string) => sensorName(all.find((x) => x.mac === mac) ?? { mac });
   const pour = pours.data?.find((p) => p.id === pourId) ?? null;
 
   /** 회차로 이동: 그 회차 센서 + 타설 전날 ~ 타설 후 29일 */
@@ -62,7 +70,7 @@ export default function Sensors() {
     setInited(true);
     const p = pours.data.find((x) => x.id === pourId);
     if (p) return goPour(p);
-    const latest = [...sensors.data].sort((a, b) => (a.last < b.last ? 1 : -1))[0];
+    const latest = [...sensors.data].filter((s) => !s.hidden).sort((a, b) => (a.last < b.last ? 1 : -1))[0];
     if (!latest) return;
     setMacs([latest.mac]);
     setTo(dateOf(latest.last));
@@ -102,8 +110,18 @@ export default function Sensors() {
     setMacs([...macs, mac]);
   };
   // 회차 센서를 앞에, 나머지는 최근 수집 순
-  const chipOrder = [...all].sort((a, b) =>
+  // 숨긴 센서는 칩에서 빼되, 지금 그래프에 켜져 있는 센서(회차 연결 등)는 남긴다
+  const hiddenCount = all.filter((s) => s.hidden).length;
+  const chipOrder = all.filter((s) => !s.hidden || showHidden || macs.includes(s.mac)).sort((a, b) =>
     Number(pour?.sensors.includes(b.mac) ?? 0) - Number(pour?.sensors.includes(a.mac) ?? 0) || (a.last < b.last ? 1 : -1));
+
+  /** 센서 관리에서 바꾼 결과를 목록에 반영. 숨기거나 지운 센서는 그래프에서도 끈다 */
+  const onSensorChanged = (s: SensorInfo | null, removedMac?: string) => {
+    sensors.setData((xs) => (removedMac ? xs?.filter((x) => x.mac !== removedMac)
+      : xs?.map((x) => (x.mac === s?.mac ? s : x))) ?? xs);
+    const off = removedMac ?? (s?.hidden ? s.mac : null);
+    if (off) setMacs((m) => m.filter((x) => x !== off));
+  };
 
   return (
     <main className="page">
@@ -128,21 +146,36 @@ export default function Sensors() {
         {pour && (
           <div className="tiny">
             {pour.name} 타설 시작 {fmtDateTime(startOf(pour))} {pour.pour_start ? "(확정)" : pour.detected_start ? "(자동 추정)" : "(없음)"}
-            {" "}· 연결 센서 {pour.sensors.join(", ") || "없음"}
+            {" "}· 연결 센서 {pour.sensors.map(nameOf).join(", ") || "없음"}
           </div>
         )}
         <div className="chips" aria-label="센서 선택">
           {chipOrder.map((s) => (
-            <button key={s.mac} type="button" className={`chip ${macs.includes(s.mac) ? "on" : ""}`} aria-pressed={macs.includes(s.mac)}
-              onClick={() => toggle(s.mac)} title="수집 기간 · 실제 데이터 양 (기간 중간이 비어 있을 수 있음)">
-              <span className="dot" style={{ background: sensorColor(s.mac, allMacs.indexOf(s.mac)) }} />
-              {s.mac} <span className="tiny">{s.kind === "moisture" ? "수분" : "측압"} · {fmtSensorSpan(s.first, s.last, s.buckets)}</span>
-            </button>
+            <span key={s.mac} className={`chip-item ${canEdit ? "has-menu" : ""} ${s.hidden ? "is-hidden" : ""}`}>
+              <button type="button" className={`chip ${macs.includes(s.mac) ? "on" : ""}`} aria-pressed={macs.includes(s.mac)}
+                onClick={() => toggle(s.mac)} title="수집 기간 · 실제 데이터 양 (기간 중간이 비어 있을 수 있음)">
+                <span className="dot" style={{ background: sensorColor(s.mac, allMacs.indexOf(s.mac)) }} />
+                {sensorName(s)} <span className="tiny">{s.label ? `${s.mac} · ` : ""}{s.kind === "moisture" ? "수분" : "측압"} · {fmtSensorSpan(s.first, s.last, s.buckets)}{s.hidden ? " · 숨김" : ""}</span>
+              </button>
+              {canEdit && <SensorChipMenu s={s} onChanged={(x) => onSensorChanged(x)} onDelete={setToDelete}
+                onMessage={(text, error) => setNote(text ? { text, error } : null)} />}
+            </span>
           ))}
+          {hiddenCount > 0 && (
+            <button type="button" className="link-btn tiny" aria-expanded={showHidden} onClick={() => setShowHidden((v) => !v)}>
+              {showHidden ? "숨긴 센서 접기" : `숨긴 센서 ${hiddenCount}개`}
+            </button>
+          )}
           {sensors.data?.length === 0 && <span className="tiny">저장된 센서 데이터가 없습니다.{canEdit && " 아래에서 CSV를 불러오세요."}</span>}
         </div>
+        {note && <div className={`alert ${note.error ? "warn" : "success"} small`} role="status">{note.text}</div>}
         <ErrorBox error={rangeError} />
       </div>
+      {toDelete && (
+        <DeleteSensorModal s={toDelete} linked={(pours.data ?? []).filter((p) => p.sensors.includes(toDelete.mac))} pours={pours.data ?? []}
+          onClose={() => setToDelete(null)}
+          onDeleted={(text) => { const mac = toDelete.mac; setToDelete(null); setNote({ text }); onSensorChanged(null, mac); }} />
+      )}
 
       <ErrorBox error={err ?? sensors.error ?? pours.error} />
       {loading && <Loading />}
@@ -162,7 +195,7 @@ export default function Sensors() {
               series: series.map(([mac, s]) => {
                 const c = sensorColor(mac, allMacs.indexOf(mac));
                 return {
-                  name: mac, type: "line", symbol: "none", connectNulls: false, sampling: "lttb",
+                  name: nameOf(mac), type: "line", symbol: "none", connectNulls: false, sampling: "lttb",
                   lineStyle: { width: 1.5, color: c }, itemStyle: { color: c },
                   data: s.t.map((t, i) => [t.replace("T", " "), s[metric]![i]]),
                 };

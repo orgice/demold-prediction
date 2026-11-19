@@ -31,6 +31,11 @@ docker compose exec backend python -m scripts.create_admin <ID> [이름]   # 비
 그 뒤 계정 추가·권한 변경은 화면의 **사용자 관리**(관리자 메뉴)에서 합니다.
 관리자 비밀번호를 잊었을 때도 같은 스크립트를 실행하면 비밀번호가 재설정됩니다.
 
+**로컬 개발용 시험 계정**: `SEED_TEST_USERS=true`로 백엔드를 켜면 권한마다 하나씩 시험 계정을 만듭니다
+(`test-admin` 관리자, `test-editor` 편집, `test-viewer` 보기 · 비밀번호는 `backend/app/test_users.py`).
+없는 계정만 만들고 이미 있으면 그대로 둡니다. 비밀번호가 코드에 공개돼 있으므로 **실제 서비스에서는 켜지 마세요**
+(`COOKIE_SECURE=true`이면 켜져 있어도 만들지 않습니다).
+
 | 권한 | 할 수 있는 것 |
 |---|---|
 | 보기 | 모든 화면 조회, AI 상담 |

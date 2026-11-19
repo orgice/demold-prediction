@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .audit import AuditMiddleware
 from .auth import current_user, editor_for_writes, ensure_first_admin
+from .test_users import ensure_test_users
 from .config import CORS_ORIGINS
 from .db import Base, engine
 from . import notify
@@ -59,6 +60,7 @@ def create_tables():
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override FLOAT NULL"))
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override_reason VARCHAR(300) NULL"))
     ensure_first_admin()
+    ensure_test_users()
     notify.start()   # SMTP 설정이 있으면 알림 메일 자동 발송 시작
 
 

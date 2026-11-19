@@ -1,6 +1,7 @@
 // [화면] 시험 강도 대시보드 ( / ) — 화면설계서 1~6쪽, 수행계획서 대시보드 기능
-//   ① 진행 중 회차 배너·선택   ② 이전 회차 선택 (검색·전체 선택·선택 해제·개별 선택, 최대 4개)
-//   ③ 겹쳐 보기 / 회차별 보기  ④ 회차 요약 (현재·28일·보정) + ▸ 기준 강도 도달 예상 시점
+//   ① 진행 중 회차 배너·선택   ② 이전 회차 선택 (검색·전체 선택·선택 해제·개별 선택, 최대 3개)
+//   ③ 겹쳐 보기 / 회차별 보기 (회차별: 1개 = 큰 그래프, 2개 = 절반씩, 3개 = 3분의 1씩, 4개 = 기준 회차 큰 그래프 + 아래 3개)
+//      ④ 회차 요약 (현재·28일·보정) + ▸ 기준 강도 도달 예상 시점
 //   ⑤ 종 아이콘 = 강도 알림 패널 (해체 기준 도달 하루 전 → 메일 자동 발송 또는 초안. 숫자 = 아직 안 보낸 알림)
 // 진행 중 회차 = 타설 후 28일이 지나지 않은 회차. 협력사 DB 연동 후에는 실시간 수집 회차가 된다.
 import { useEffect, useMemo, useState } from "react";
@@ -17,7 +18,7 @@ import {
 import { fmtAge, fmtDateTime, hoursBetween } from "../format";
 
 const ACTIVE_DAYS = 28;
-const MAX_PREV = 4;          // 이전 회차는 4개까지 (진행 회차 포함 최대 5개 그래프)
+const MAX_PREV = 3;          // 이전 회차는 3개까지 (기준 회차 포함 최대 4개 그래프)
 type View = "overlay" | "separate";
 
 const startOf = (p: Pour) => p.pour_start ?? p.detected_start;
@@ -382,6 +383,32 @@ function PredFallback({ state }: { state: PredState }) {
   return <Loading text="예측 계산 중…" />;
 }
 
+/** 큰 그래프 카드 (겹쳐 보기 회차 1개, 회차별 보기 1개·4개일 때 맨 위) */
+function BigCard({ item: it, color, demo, open, onToggle, yMax }: {
+  item: Item; color?: string; demo: boolean; open: boolean; onToggle: () => void; yMax?: number;
+}) {
+  const pred = it.state.data;
+  return (
+    <div className="card stack loose">
+      <SummaryHead item={it} color={color} demo={demo} open={open} onToggle={onToggle} />
+      {pred ? (
+        <>
+          <Kpis pred={pred} />
+          <Milestones pred={pred} open={open} />
+          <div>
+            <h3>압축강도 예측 비교</h3>
+            <StrengthChart pred={pred} yMax={yMax} />
+          </div>
+          <div>
+            <h3>콘크리트 내부온도<Info align="right">점선은 직전 24시간 온도 패턴이 반복된다고 가정한 값입니다.</Info></h3>
+            <TempChart pred={pred} />
+          </div>
+        </>
+      ) : <PredFallback state={it.state} />}
+    </div>
+  );
+}
+
 // ---------------- 겹쳐 보기 ----------------
 function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number) => string; demo: boolean }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
@@ -391,26 +418,7 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
   // 회차 하나: 상세와 같은 요약 + 그래프
   if (items.length === 1) {
     const it = items[0];
-    const pred = it.state.data;
-    return (
-      <div className="card stack loose">
-        <SummaryHead item={it} demo={demo} open={!!open[it.pour.id]} onToggle={() => toggle(it.pour.id)} />
-        {pred ? (
-          <>
-            <Kpis pred={pred} />
-            <Milestones pred={pred} open={!!open[it.pour.id]} />
-            <div>
-              <h3>압축강도 예측 비교</h3>
-              <StrengthChart pred={pred} />
-            </div>
-            <div>
-              <h3>콘크리트 내부온도<Info align="right">점선은 직전 24시간 온도 패턴이 반복된다고 가정한 값입니다.</Info></h3>
-              <TempChart pred={pred} />
-            </div>
-          </>
-        ) : <PredFallback state={it.state} />}
-      </div>
-    );
+    return <BigCard item={it} demo={demo} open={!!open[it.pour.id]} onToggle={() => toggle(it.pour.id)} />;
   }
 
   // 여러 회차: 같은 경과일 축
@@ -443,37 +451,52 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
 }
 
 // ---------------- 회차별 보기 ----------------
+// 1개: 겹쳐 보기와 같은 큰 그래프 / 2개: 절반씩 / 3개: 3분의 1씩
+// 4개 이상(이전 회차 3개, 또는 진행 회차가 여럿): 기준 회차를 맨 위 큰 그래프로, 나머지는 아래 3분의 1씩
 function Separate({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number) => string; demo: boolean }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
+  const toggle = (id: number) => setOpen((o) => ({ ...o, [id]: !o[id] }));
+  if (items.length === 0) return null;
   // 모든 카드의 강도 축을 맞춘다
   const ys = items.flatMap((i) => i.state.data
     ? [i.state.data.strength_28d, ...i.state.data.tests.map((t) => t.fc), ...i.state.data.milestones.map((m) => m.threshold)] : []);
   const yMax = Math.ceil((Math.max(14, ...ys) * 1.15) / 6) * 6;
+
+  const top = items.length === 1 || items.length >= 4 ? items[0] : null;
+  const rest = top ? items.slice(1) : items;
+  const cols = rest.length === 2 ? 2 : 3;
+  const half = cols === 2;
   return (
-    <div className="grid sep-grid">
-      {items.map((it) => {
-        const pred = it.state.data;
-        return (
-          <div key={it.pour.id} className="card stack">
-            <SummaryHead item={it} color={colorOf(it.pour.id)} demo={demo} open={!!open[it.pour.id]}
-              onToggle={() => setOpen((o) => ({ ...o, [it.pour.id]: !o[it.pour.id] }))} />
-            {pred ? (
-              <>
-                <Kpis pred={pred} compact />
-                <Milestones pred={pred} open={!!open[it.pour.id]} />
-                <div>
-                  <h3 className="small">압축강도 예측</h3>
-                  <StrengthChart pred={pred} compact height={220} yMax={yMax} />
-                </div>
-                <div>
-                  <h3 className="small">콘크리트 내부온도</h3>
-                  <TempChart pred={pred} compact height={120} />
-                </div>
-              </>
-            ) : <PredFallback state={it.state} />}
-          </div>
-        );
-      })}
+    <div className="stack loose">
+      {top && <BigCard item={top} color={items.length > 1 ? colorOf(top.pour.id) : undefined} demo={demo}
+        open={!!open[top.pour.id]} onToggle={() => toggle(top.pour.id)} yMax={items.length > 1 ? yMax : undefined} />}
+      {rest.length > 0 && (
+        <div className={`grid sep-grid sep-${cols}`}>
+          {rest.map((it) => {
+            const pred = it.state.data;
+            return (
+              <div key={it.pour.id} className="card stack">
+                <SummaryHead item={it} color={colorOf(it.pour.id)} demo={demo} open={!!open[it.pour.id]}
+                  onToggle={() => toggle(it.pour.id)} />
+                {pred ? (
+                  <>
+                    <Kpis pred={pred} compact />
+                    <Milestones pred={pred} open={!!open[it.pour.id]} />
+                    <div>
+                      <h3 className="small">압축강도 예측</h3>
+                      <StrengthChart pred={pred} compact height={half ? 280 : 220} yMax={yMax} />
+                    </div>
+                    <div>
+                      <h3 className="small">콘크리트 내부온도</h3>
+                      <TempChart pred={pred} compact height={half ? 150 : 120} />
+                    </div>
+                  </>
+                ) : <PredFallback state={it.state} />}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

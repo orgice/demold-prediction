@@ -132,7 +132,10 @@ export interface StrengthTest {
 
 export type StrengthTestIn = Omit<StrengthTest, "id" | "pour_id" | "average">;
 
-export interface SensorInfo { mac: string; kind: "pressure" | "moisture"; first: string; last: string; buckets: number }
+// label: 표시 이름, hidden: 목록에서 숨김. ⚠ 둘 다 백엔드 미구현 — docs/sensor-data-api-request.md
+export interface SensorInfo { mac: string; kind: "pressure" | "moisture"; first: string; last: string; buckets: number; label?: string | null; hidden?: boolean }
+export interface SensorPatch { label?: string | null; hidden?: boolean }
+export interface SensorDeleteResult { mac: string; rows_deleted: number; pours: number[] }
 
 /** 센서 데이터 화면의 그래프 데이터: 센서별 시각 목록 t와 항목별 값 목록 */
 export interface SeriesResponse {
@@ -155,7 +158,11 @@ export interface UploadResult {
 }
 
 // 업로드 이력에는 sensors가 없다
-export type UploadLog = Omit<UploadResult, "sensors"> & { id: number; created_at: string };
+// label: 사용자가 붙인 표시 이름 (없으면 filename). ⚠ 백엔드 미구현 — docs/csv-data-api-request.md
+export type UploadLog = Omit<UploadResult, "sensors"> & { id: number; created_at: string; label?: string | null };
+
+/** CSV 데이터 삭제 결과. ⚠ 백엔드 미구현 (요청 중) */
+export interface UploadDeleteResult { rows_deleted: number; sensors: string[]; period_start: string | null; period_end: string | null }
 
 export interface ChatMessage { role: "user" | "assistant"; content: string }
 export interface AgentStep { tool: string; args: Record<string, unknown>; ok: boolean }
@@ -233,6 +240,9 @@ export const api = {
     request<void>(`/api/pours/${id}/exclusions/${exId}`, { method: "DELETE" }),
   // 센서 데이터·업로드 (routers/sensors.py)
   sensors: () => request<SensorInfo[]>("/api/sensors"),
+  // ⚠ 백엔드 미구현 (docs/sensor-data-api-request.md). 화면은 api/sensors.ts 를 거쳐 부른다
+  updateSensor: (mac: string, patch: SensorPatch) => request<SensorInfo>(`/api/sensors/${encodeURIComponent(mac)}`, json("PATCH", patch)),
+  deleteSensor: (mac: string) => request<SensorDeleteResult>(`/api/sensors/${encodeURIComponent(mac)}`, { method: "DELETE" }),
   series: (macs: string[], start: string, end: string) => {
     const q = new URLSearchParams({ start, end });
     macs.forEach((m) => q.append("macs", m));
@@ -244,6 +254,9 @@ export const api = {
     return request<UploadResult[]>("/api/upload", { method: "POST", body: fd });
   },
   uploads: () => request<UploadLog[]>("/api/uploads"),
+  // ⚠ 아래 두 API는 백엔드에 아직 없다. 화면은 api/uploads.ts 를 거쳐 목업(uploadsMock.ts)을 쓴다
+  renameUpload: (id: number, label: string | null) => request<UploadLog>(`/api/uploads/${id}`, json("PATCH", { label })),
+  deleteUpload: (id: number) => request<UploadDeleteResult>(`/api/uploads/${id}`, { method: "DELETE" }),
   // AI 상담 (routers/agent.py)
   ask: (question: string, history: ChatMessage[]) =>
     request<AgentReply>("/api/agent/ask", json("POST", { question, history })),
