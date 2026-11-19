@@ -240,7 +240,7 @@ export const api = {
     request<void>(`/api/pours/${id}/exclusions/${exId}`, { method: "DELETE" }),
   // 센서 데이터·업로드 (routers/sensors.py)
   sensors: () => request<SensorInfo[]>("/api/sensors"),
-  // ⚠ 백엔드 미구현 (docs/sensor-data-api-request.md). 화면은 api/sensors.ts 를 거쳐 부른다
+  // 센서 이름 변경·숨기기(편집 이상)·삭제(관리자). 화면은 api/sensors.ts 를 거쳐 부른다
   updateSensor: (mac: string, patch: SensorPatch) => request<SensorInfo>(`/api/sensors/${encodeURIComponent(mac)}`, json("PATCH", patch)),
   deleteSensor: (mac: string) => request<SensorDeleteResult>(`/api/sensors/${encodeURIComponent(mac)}`, { method: "DELETE" }),
   series: (macs: string[], start: string, end: string) => {
@@ -254,7 +254,7 @@ export const api = {
     return request<UploadResult[]>("/api/upload", { method: "POST", body: fd });
   },
   uploads: () => request<UploadLog[]>("/api/uploads"),
-  // ⚠ 아래 두 API는 백엔드에 아직 없다. 화면은 api/uploads.ts 를 거쳐 목업(uploadsMock.ts)을 쓴다
+  // 업로드 이름 변경(편집 이상)·삭제(관리자). 화면은 api/uploads.ts 를 거쳐 부른다
   renameUpload: (id: number, label: string | null) => request<UploadLog>(`/api/uploads/${id}`, json("PATCH", { label })),
   deleteUpload: (id: number) => request<UploadDeleteResult>(`/api/uploads/${id}`, { method: "DELETE" }),
   // AI 상담 (routers/agent.py)

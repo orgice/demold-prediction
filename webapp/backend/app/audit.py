@@ -38,6 +38,10 @@ ACTIONS: list[tuple[str, str, str]] = [
     ("POST", r"/api/pours/\d+/exclusions", "제외 구간 추가"),
     ("DELETE", r"/api/pours/\d+/exclusions/\d+", "제외 구간 삭제"),
     ("POST", r"/api/upload", "CSV 업로드"),
+    ("PATCH", r"/api/uploads/\d+", "CSV 이름 변경"),
+    ("DELETE", r"/api/uploads/\d+", "CSV 데이터 삭제"),
+    ("PATCH", r"/api/sensors/[^/]+", "센서 이름·숨김 변경"),
+    ("DELETE", r"/api/sensors/[^/]+", "센서 데이터 삭제"),
     ("POST", r"/api/notify/test", "알림 메일 시험 발송"),
     ("POST", r"/api/notify/run", "알림 메일 지금 확인"),
 ]
@@ -102,7 +106,8 @@ class AuditMiddleware(BaseHTTPMiddleware):
         body = await request.body() if "application/json" in ctype else b""   # CSV 업로드 본문은 읽지 않음
         response = await call_next(request)
         login_id = getattr(request.state, "login_id", None)
-        detail = mask(body, ctype)
+        # 삭제처럼 보낸 내용이 없는 작업은 API 가 결과(지운 행 수 등)를 request.state.audit_detail 에 남긴다
+        detail = getattr(request.state, "audit_detail", None) or mask(body, ctype)
         if path == "/api/auth/login":   # 로그인은 입력한 ID를 '누가'로 남기고 내용은 남기지 않음
             try:
                 login_id = login_id or str(json.loads(body).get("id", ""))[:64] or None

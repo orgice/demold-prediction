@@ -26,6 +26,7 @@ from .auth import current_user, editor_for_writes, ensure_first_admin
 from .test_users import ensure_test_users
 from .config import CORS_ORIGINS
 from .db import Base, engine
+from .ingest import link_legacy_rows
 from . import notify
 from .routers import agent, audit, auth, model, notify as notify_router, pours, sensors, users
 
@@ -59,6 +60,13 @@ def create_tables():
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS durable BOOLEAN NOT NULL DEFAULT 0"))
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override FLOAT NULL"))
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override_reason VARCHAR(300) NULL"))
+        # CSV·센서 관리: 원본 행이 어느 업로드로 들어왔는지, 업로드 표시 이름·센서 목록
+        for t in ("pressure", "moisture"):
+            c.execute(text(f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS upload_id INT NULL"))
+            c.execute(text(f"CREATE INDEX IF NOT EXISTS ix_{t}_upload ON {t} (upload_id)"))
+        c.execute(text("ALTER TABLE upload_log ADD COLUMN IF NOT EXISTS label VARCHAR(100) NULL"))
+        c.execute(text("ALTER TABLE upload_log ADD COLUMN IF NOT EXISTS sensors VARCHAR(500) NULL"))
+    link_legacy_rows(engine)   # upload_id 가 없던 기존 원본 행을 업로드 기록에 연결 (처음 한 번만 오래 걸림)
     ensure_first_admin()
     ensure_test_users()
     notify.start()   # SMTP 설정이 있으면 알림 메일 자동 발송 시작
