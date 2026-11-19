@@ -1,12 +1,18 @@
-"""센서 CSV 적재.
+"""센서 CSV 적재·삭제.
 
 1) 협력사 CSV(측압/수분)를 읽어 원본 그대로 pressure/moisture 테이블에 INSERT IGNORE
 2) 영향받은 센서·기간의 10분 집계(sensor_10min)를 다시 계산
 
-흐름: ingest_csv() → parse_csv() → _insert() → rebuild_10min() → _aggregate_*() → _upsert_10min()
+흐름: save_upload() → parse_csv() → upload_log 기록 → _store() → _insert() → rebuild_10min()
+      → _aggregate_*() → _upsert_10min()
+
+원본 행마다 처음 저장한 업로드 id(upload_id)를 남겨, 업로드 하나를 정확히 지울 수 있게 한다
+(delete_upload). 같은 행이 다른 파일에도 있으면 처음 올린 업로드에만 연결된다 (row_hash 중복 제거).
+센서 하나의 기록 전체 삭제는 delete_sensor.
 """
 import hashlib
 import io
+import re
 from datetime import timedelta
 
 import numpy as np
@@ -15,6 +21,11 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from .config import GRAM_SENSORS, PRESSURE_OUTLIER_KG, RAWMO_MISSING, TEMP_MISSING
+from .db import SessionLocal
+from .models import UploadLog
+
+# 10분 집계에 넣는 센서 MAC: 영숫자 4~12자리만 (깨진 MAC은 LoRa 파싱 오류)
+MAC_RE = r"[0-9A-F]{4,12}"
 
 # 협력사 CSV의 컬럼 (DB 테이블 컬럼과 같은 이름)
 PRESSURE_COLS = ["mac", "press", "weight", "temp1", "temp2", "temp3", "temp", "humi",
@@ -156,15 +167,12 @@ def _upsert_10min(engine: Engine, agg: pd.DataFrame):
         raw_conn.close()
 
 
-def ingest_csv(engine: Engine, content: bytes, filename: str) -> dict:
-    """CSV 파일 하나를 처리하는 입구. 원본 저장 → 센서별 10분 집계 → 결과 요약을 돌려준다."""
-    kind, df = parse_csv(content, filename)
-    if df.empty:
-        raise IngestError("유효한 행(mac, timestamp)이 없습니다.")
-    inserted = _insert(engine, kind, df)
-    # 깨진 MAC(LoRa 파싱 오류)은 집계에서 제외: 영숫자 4~12자리만
+def _store(engine: Engine, kind: str, df: pd.DataFrame, upload_id: int | None) -> dict:
+    """정리된 표를 원본 테이블에 넣고, 영향받은 센서의 10분 집계를 다시 계산한다."""
+    inserted = _insert(engine, kind, df.assign(upload_id=upload_id))
+    # 깨진 MAC(LoRa 파싱 오류)은 집계에서 제외: 영숫자 4~12자리, 10행 이상만
     macs = df.groupby("mac").timestamp.agg(["min", "max", "size"])
-    macs = macs[macs.index.str.fullmatch(r"[0-9A-F]{4,12}") & (macs["size"] >= 10)]
+    macs = macs[macs.index.str.fullmatch(MAC_RE) & (macs["size"] >= 10)]
     for mac, r in macs.iterrows():
         rebuild_10min(engine, kind, mac, r["min"], r["max"])
     return {
@@ -173,3 +181,114 @@ def ingest_csv(engine: Engine, content: bytes, filename: str) -> dict:
         "period_end": df.timestamp.max().to_pydatetime(),
         "sensors": sorted(macs.index.tolist()),
     }
+
+
+def ingest_csv(engine: Engine, content: bytes, filename: str, upload_id: int | None = None) -> dict:
+    """CSV 파일 하나를 처리한다. 원본 저장 → 센서별 10분 집계 → 결과 요약. (업로드 기록은 남기지 않음)"""
+    kind, df = parse_csv(content, filename)
+    if df.empty:
+        raise IngestError("유효한 행(mac, timestamp)이 없습니다.")
+    return _store(engine, kind, df, upload_id)
+
+
+def save_upload(engine: Engine, content: bytes, filename: str) -> dict:
+    """업로드 화면·초기 적재의 입구. upload_log 를 먼저 만들어 id 를 얻고, 그 id 를 원본 행에 남기며 적재한다.
+
+    적재 중 오류가 나면 업로드 기록도 지운다. 반환: ingest_csv 결과 + upload_id.
+    """
+    kind, df = parse_csv(content, filename)
+    if df.empty:
+        raise IngestError("유효한 행(mac, timestamp)이 없습니다.")
+    with SessionLocal() as s:
+        log = UploadLog(filename=filename, kind=kind, rows_total=len(df), rows_inserted=0,
+                        period_start=df.timestamp.min().to_pydatetime(),
+                        period_end=df.timestamp.max().to_pydatetime())
+        s.add(log)
+        s.commit()
+        try:
+            r = _store(engine, kind, df, log.id)
+        except Exception:
+            s.delete(log)
+            s.commit()
+            raise
+        log.rows_inserted = r["rows_inserted"]
+        log.sensors = ",".join(r["sensors"])[:500]
+        s.commit()
+        return {**r, "upload_id": log.id}
+
+
+def _span(a, b) -> tuple:
+    """rebuild_10min 이 다시 계산하는 10분 칸 범위 [시작, 끝)."""
+    return pd.Timestamp(a).floor("10min").to_pydatetime(), (pd.Timestamp(b).ceil("10min") + timedelta(minutes=10)).to_pydatetime()
+
+
+def delete_upload(engine: Engine, upload_id: int) -> dict:
+    """업로드 하나로 저장된 원본 행을 지우고, 그 센서·기간의 10분 집계를 남은 원본으로 다시 계산한다.
+
+    원본 삭제와 업로드 기록 삭제는 한 트랜잭션. 10분 집계는 원본에서 언제든 다시 만들 수 있는
+    파생 값이라 그 뒤에 다시 계산한다 (실패해도 원본은 맞는 상태, 같은 기간을 다시 올리면 복구됨).
+    """
+    with engine.begin() as c:
+        log = c.execute(text("SELECT kind, period_start, period_end FROM upload_log WHERE id = :id FOR UPDATE"),
+                        {"id": upload_id}).first()
+        if log is None:
+            raise LookupError("업로드 기록이 없습니다.")
+        table = "pressure" if log.kind == "pressure" else "moisture"
+        spans = c.execute(text(f"SELECT mac, MIN(timestamp) AS a, MAX(timestamp) AS b FROM {table} "
+                               "WHERE upload_id = :id GROUP BY mac"), {"id": upload_id}).all()
+        deleted = c.execute(text(f"DELETE FROM {table} WHERE upload_id = :id"), {"id": upload_id}).rowcount
+        # 10분 집계가 있던 센서만 다시 계산 (집계에서 빠졌던 깨진 MAC은 그대로 둔다)
+        rebuild = []
+        for mac, a, b in spans:
+            lo, hi = _span(a, b)
+            if c.execute(text("DELETE FROM sensor_10min WHERE mac = :m AND bucket >= :a AND bucket < :b"),
+                         {"m": mac, "a": lo, "b": hi}).rowcount:
+                rebuild.append((mac, a, b))
+        c.execute(text("DELETE FROM upload_log WHERE id = :id"), {"id": upload_id})
+    for mac, a, b in rebuild:
+        rebuild_10min(engine, log.kind, mac, a, b)
+    return {"rows_deleted": int(deleted), "sensors": sorted(m for m, _, _ in rebuild),
+            "period_start": log.period_start, "period_end": log.period_end}
+
+
+def delete_sensor(engine: Engine, mac: str) -> int | None:
+    """센서 하나의 측정 기록 전체(원본·10분 집계)와 화면 설정을 한 트랜잭션으로 지운다.
+
+    반환: 지운 원본 행 수. 그 센서의 데이터가 아예 없으면 None. 업로드 기록(upload_log)은 남긴다.
+    """
+    with engine.begin() as c:
+        p = {"m": mac}
+        buckets = c.execute(text("DELETE FROM sensor_10min WHERE mac = :m"), p).rowcount
+        rows = (c.execute(text("DELETE FROM pressure WHERE mac = :m"), p).rowcount
+                + c.execute(text("DELETE FROM moisture WHERE mac = :m"), p).rowcount)
+        meta = c.execute(text("DELETE FROM sensor_meta WHERE mac = :m"), p).rowcount
+    return int(rows) if (rows or buckets or meta) else None
+
+
+def link_legacy_rows(engine: Engine) -> None:
+    """upload_id 가 생기기 전에 저장된 원본 행을 업로드 기록에 연결한다 (서버 시작 때, 처음 한 번만 오래 걸림).
+
+    같은 파일 이름의 업로드 중 실제로 행을 저장한(rows_inserted > 0) 가장 이른 업로드에 연결한다.
+    다시 올려 0행이었던 업로드는 연결되는 행이 없어, 지워도 업로드 기록만 지워진다.
+    센서 목록이 비어 있는 업로드 기록도 원본에서 채운다.
+    """
+    with engine.begin() as c:
+        for table in ("pressure", "moisture"):
+            c.execute(text(
+                f"UPDATE {table} t JOIN (SELECT filename, MIN(id) AS id FROM upload_log "
+                "WHERE kind = :k AND rows_inserted > 0 GROUP BY filename) u ON t.src_file = u.filename "
+                "SET t.upload_id = u.id WHERE t.upload_id IS NULL"), {"k": table})
+        todo = c.execute(text("SELECT id, kind, filename FROM upload_log WHERE sensors IS NULL")).all()
+        if not todo:
+            return
+        found: dict[tuple[str, str], list[str]] = {}
+        for table in {k for _, k, _ in todo}:
+            if table not in ("pressure", "moisture"):
+                continue
+            for f, mac, n in c.execute(text(f"SELECT src_file, mac, COUNT(*) FROM {table} "
+                                            "WHERE src_file IS NOT NULL GROUP BY src_file, mac")):
+                if n >= 10 and mac and re.fullmatch(MAC_RE, mac):
+                    found.setdefault((table, f), []).append(mac)
+        for i, kind, f in todo:
+            c.execute(text("UPDATE upload_log SET sensors = :s WHERE id = :id"),
+                      {"s": ",".join(sorted(found.get((kind, f), [])))[:500], "id": i})

@@ -143,6 +143,19 @@ class SensorOut(BaseModel):
     first: datetime
     last: datetime
     buckets: int                                     # 10분 집계 칸 수 (데이터 양)
+    label: str | None = None                         # 사용자가 붙인 표시 이름 (없으면 화면은 MAC)
+    hidden: bool = False                             # 목록에서 숨김 (데이터·예측은 그대로)
+
+
+class SensorPatch(BaseModel):
+    """센서 이름 변경·숨기기. 보낸 항목만 바뀐다. label 이 null·빈 문자열이면 MAC 으로 되돌린다."""
+    label: str | None = None
+    hidden: bool | None = None
+
+
+class UploadPatch(BaseModel):
+    """CSV 표시 이름 변경. null·빈 문자열이면 원래 파일 이름으로 되돌린다."""
+    label: str | None = None
 
 
 class UploadOut(BaseModel):

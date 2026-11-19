@@ -13,8 +13,8 @@ import pandas as pd
 from sqlalchemy import select
 
 from app.db import Base, SessionLocal, engine
-from app.ingest import ingest_csv
-from app.models import Pour, StrengthTest, UploadLog
+from app.ingest import save_upload
+from app.models import Pour, StrengthTest
 from app.pour_detect import detect_pour
 
 SEED = Path(__file__).resolve().parents[1] / "seed"   # backend/seed 폴더
@@ -22,15 +22,10 @@ SEED = Path(__file__).resolve().parents[1] / "seed"   # backend/seed 폴더
 
 
 def load_sensors(folder: Path):
-    """폴더(하위 폴더 포함)의 모든 CSV를 업로드 화면과 같은 방식(ingest_csv)으로 적재한다."""
+    """폴더(하위 폴더 포함)의 모든 CSV를 업로드 화면과 같은 방식(save_upload)으로 적재한다."""
     for f in sorted(folder.rglob("*.csv")):
         t = time.time()
-        r = ingest_csv(engine, f.read_bytes(), f.name)
-        with SessionLocal() as s:
-            s.add(UploadLog(filename=f.name, kind=r["kind"], rows_total=r["rows_total"],
-                            rows_inserted=r["rows_inserted"], period_start=r["period_start"],
-                            period_end=r["period_end"]))
-            s.commit()
+        r = save_upload(engine, f.read_bytes(), f.name)
         print(f"  {f.name}: {r['rows_inserted']:,}/{r['rows_total']:,}행, 센서 {r['sensors']} "
               f"({time.time() - t:.0f}초)", flush=True)
 

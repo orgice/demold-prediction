@@ -7,6 +7,7 @@ pressure / moisture 테이블은 협력사 MariaDB 스키마와 컬럼명을 맞
     pressure       측압 센서 원본 (CSV 그대로, 수 초 간격)
     moisture       수분 센서 원본
     sensor_10min   위 두 원본을 정제해 10분 단위로 모은 값  ← 그래프·예측은 이것만 쓴다
+    sensor_meta    센서 표시 이름·목록 숨김 (화면 설정)
     pour           타설 회차 (이름, 타설 시각, 사용 센서, 설계강도)
     strength_test  공시체 압축강도 시험 결과 (회차마다 여러 건)
     excluded_range 예측 계산에서 뺄 측정 구간 (센서 이상·탈형 작업). 원본은 그대로 둔다
@@ -45,10 +46,11 @@ class Pressure(Base):
     timestamp: Mapped[datetime | None] = mapped_column(DateTime)       # 측정 시각 (현장 현지 시각)
     pressure_sn: Mapped[str | None] = mapped_column(String(32))
     src_file: Mapped[str | None] = mapped_column(String(255))          # 어느 CSV에서 왔는지
+    upload_id: Mapped[int | None] = mapped_column(Integer)             # 이 행을 처음 저장한 업로드 (upload_log.id)
     row_hash: Mapped[str] = mapped_column(CHAR(32), unique=True)  # 같은 파일 재업로드 시 중복 방지
 
-    # 센서+시각으로 빨리 찾기 위한 색인
-    __table_args__ = (Index("ix_pressure_mac_ts", "mac", "timestamp"),)
+    # 센서+시각으로 빨리 찾기 위한 색인, 업로드 단위 삭제용 색인
+    __table_args__ = (Index("ix_pressure_mac_ts", "mac", "timestamp"), Index("ix_pressure_upload", "upload_id"))
 
 
 class Moisture(Base):
@@ -66,9 +68,10 @@ class Moisture(Base):
     timestamp: Mapped[datetime | None] = mapped_column(DateTime)
     remark: Mapped[str | None] = mapped_column(String(255))
     src_file: Mapped[str | None] = mapped_column(String(255))
+    upload_id: Mapped[int | None] = mapped_column(Integer)             # 이 행을 처음 저장한 업로드 (upload_log.id)
     row_hash: Mapped[str] = mapped_column(CHAR(32), unique=True)
 
-    __table_args__ = (Index("ix_moisture_mac_ts", "mac", "timestamp"),)
+    __table_args__ = (Index("ix_moisture_mac_ts", "mac", "timestamp"), Index("ix_moisture_upload", "upload_id"))
 
 
 class Sensor10min(Base):
@@ -85,6 +88,14 @@ class Sensor10min(Base):
     n: Mapped[int] = mapped_column(Integer)                 # 이 10분 안의 원본 행 수
 
     __table_args__ = (Index("ix_10min_bucket", "bucket"),)
+
+
+class SensorMeta(Base):
+    """센서별 화면 설정: 표시 이름, 목록에서 숨김. 측정 데이터와 회차 예측에는 영향이 없다."""
+    __tablename__ = "sensor_meta"
+    mac: Mapped[str] = mapped_column(String(32), primary_key=True)
+    label: Mapped[str | None] = mapped_column(String(50))           # 사용자가 붙인 이름 (없으면 화면은 MAC)
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
 
 class Pour(Base):
@@ -180,6 +191,8 @@ class UploadLog(Base):
     rows_inserted: Mapped[int] = mapped_column(Integer)            # 중복을 뺀, 새로 저장된 행 수
     period_start: Mapped[datetime | None] = mapped_column(DateTime)
     period_end: Mapped[datetime | None] = mapped_column(DateTime)
+    label: Mapped[str | None] = mapped_column(String(100))          # 사용자가 붙인 표시 이름 (없으면 filename)
+    sensors: Mapped[str | None] = mapped_column(String(500))        # 이 CSV에 들어 있던 센서 (쉼표 구분 MAC)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
