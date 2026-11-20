@@ -140,7 +140,7 @@ docker compose down -v     # DB까지 완전히 삭제
 
 | 항목 | 규칙 |
 |---|---|
-| 측압 단위 | 일부 센서는 weight가 g 단위 → `.env`의 `GRAM_SENSORS`에 MAC을 적으면 kg로 환산 |
+| 측압 단위 | 센서·날짜마다 kg/g이 섞여 있음 → 자동 판단해 kg로 환산 (`ingest.weight_to_kg`, 틀리면 `.env`의 `GRAM_SENSORS`) |
 | 측압 이상치 | \|kg\| > 60 제거, 10분 중앙값 |
 | 온도 | −127(센서 미연결) 제거, 채널 1~3 평균 |
 | 외기 | temp = 0 이고 humi = 0 이면 미수신으로 제거 |

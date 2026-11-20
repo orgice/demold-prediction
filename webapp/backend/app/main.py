@@ -11,6 +11,8 @@ uvicorn이 이 파일의 `app`을 실행한다 (backend/Dockerfile 참고).
     /api/users...   사용자 관리 (관리자)     (routers/users.py)
     /api/audit      변경 기록 (관리자)       (routers/audit.py, 기록은 audit.py)
     /api/notify...  알림 메일 자동 발송 상태 (routers/notify.py, 발송은 notify.py)
+    /api/delta...   센서 데이터 자동 수집    (routers/delta.py, 수집은 delta_sync.py)
+    /api/live...    대시보드 새 타설 감지    (routers/live.py, 계산은 live_detect.py)
 
 /api/health 와 /api/auth/* 말고는 모두 로그인이 필요하다 (auth.py).
 조회는 모든 권한, 회차·센서 데이터를 바꾸는 요청은 편집 권한 이상, 사용자 관리는 관리자만.
@@ -28,7 +30,7 @@ from .config import CORS_ORIGINS
 from .db import Base, engine
 from .ingest import link_legacy_rows
 from . import delta_sync, notify
-from .routers import agent, audit, auth, delta, model, notify as notify_router, pours, sensors, users
+from .routers import agent, audit, auth, delta, live, model, notify as notify_router, pours, sensors, users
 
 app = FastAPI(title="거푸집 탈형 시점 예측 API", version="0.1.0")
 # CORS: 다른 주소의 웹 화면이 로그인 쿠키를 들고 이 API를 부를 수 있게 허용할 주소 (config.CORS_ORIGINS)
@@ -45,6 +47,7 @@ app.include_router(auth.router)
 app.include_router(users.router)                     # 관리자 검사는 routers/users.py 안에서
 app.include_router(audit.router)                     # 관리자 전용
 app.include_router(notify_router.router)             # 알림 자동 발송 상태·시험 발송 (권한 검사는 안에서)
+app.include_router(live.router)                      # 대시보드 '새 타설 감지' (권한 검사는 안에서)
 app.include_router(delta.router)                     # 센서 데이터 자동 수집 상태·지금 수집 (권한 검사는 안에서)
 
 

@@ -3,7 +3,9 @@
 //   ③ 겹쳐 보기 / 회차별 보기 (회차별: 1개 = 큰 그래프, 2개 = 절반씩, 3개 = 3분의 1씩, 4개 = 기준 회차 큰 그래프 + 아래 3개)
 //      ④ 회차 요약 (현재·28일·보정) + ▸ 기준 강도 도달 예상 시점
 //   ⑤ 종 아이콘 = 강도 알림 패널 (해체 기준 도달 하루 전 → 메일 자동 발송 또는 초안. 숫자 = 아직 안 보낸 알림)
-// 진행 중 회차 = 타설 후 28일이 지나지 않은 회차. 협력사 DB 연동 후에는 실시간 수집 회차가 된다.
+//   ⑥ 새 타설 감지 (맨 위): 실시간 수집 센서에서 찾은 미등록 타설 → 확인 후 회차로 등록 (components/LiveCandidates.tsx)
+// 진행 중 회차 = 타설 후 28일이 지나지 않은 회차. 센서 데이터는 10분마다 자동 수집되므로(delta_sync.py)
+// 화면도 10분마다 회차와 예측을 다시 불러온다 (탭이 보일 때만).
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, MEMBER_LABEL, Pour, Prediction } from "../api/client";
@@ -11,6 +13,7 @@ import { useCanEdit } from "../auth/AuthContext";
 import { ErrorBox, Info, Loading, MilestoneRow, useAsync } from "../components/common";
 import { AlertItem, alertsFor, KIND_LABEL, mailtoUrl, milestoneSnapshot, recipients } from "../components/alerts";
 import { demoData } from "../components/demo";
+import LiveCandidates from "../components/LiveCandidates";
 import NewPourModal, { pourUrl } from "../components/NewPourModal";
 import {
   CompareItem, CompareStrengthChart, CompareTempChart, isComplete, pourColor, StrengthChart, TempChart,
@@ -18,6 +21,7 @@ import {
 import { fmtAge, fmtDateTime, hoursBetween } from "../format";
 
 const ACTIVE_DAYS = 28;
+const REFRESH_MS = 10 * 60_000;   // 센서 자동 수집 주기와 같게
 const MAX_PREV = 3;          // 이전 회차는 3개까지 (기준 회차 포함 최대 4개 그래프)
 type View = "overlay" | "separate";
 
@@ -96,6 +100,13 @@ export default function Dashboard() {
 
   const retry = () => { setPreds({}); pours.reload(); };
 
+  // 실시간 수집 데이터 반영: 10분마다 회차·예측을 다시 불러온다 (탭이 보일 때만, 예시 모드 제외)
+  useEffect(() => {
+    if (demo) return;
+    const t = setInterval(() => { if (document.visibilityState === "visible") retry(); }, REFRESH_MS);
+    return () => clearInterval(t);
+  }, [demo]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!demo && pours.error) {
     return (
       <main className="page">
@@ -130,6 +141,7 @@ export default function Dashboard() {
           <button className="btn sm" onClick={() => setBell(true)}>알림 보기</button>
         </div>
       )}
+      {!demo && <LiveCandidates onRegistered={(p) => { pours.reload(); setMainSel(p.id); }} />}
       {!demo && <CheckList pours={active} />}
 
       {sorted.length === 0 ? (
@@ -220,7 +232,7 @@ function Banner({ active, sorted, mainIds, mainSel, onPick, demo }: {
         {active.length === 0 && (
           <div className="banner-sub">
             가장 최근 회차를 보여 줍니다
-            <Info align="right">협력사 DB 연동 후에는 실시간으로 수집되는 회차(타설 후 28일 이내)가 진행 중으로 표시됩니다.</Info>
+            <Info align="right">타설 후 28일 이내 회차가 진행 중으로 표시됩니다. 실시간 수집 센서에서 새 타설이 감지되면 위에 '새 타설 감지'가 떠서 바로 등록할 수 있어요.</Info>
           </div>
         )}
       </div>

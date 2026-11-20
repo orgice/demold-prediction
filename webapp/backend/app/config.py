@@ -10,8 +10,8 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL", "mysql+pymysql://demold:demold@localhost:3306/demold?charset=utf8mb4"
 )
 
-# 측압 weight 단위가 g인 센서. 나머지는 kg (컬럼설명: 4자리면 kg, 앞으로 g로 통일 예정)
-# 예: .env 에 GRAM_SENSORS=CDB0,CDE0
+# 측압 weight 단위가 항상 g인 센서. 적지 않아도 센서·날짜별로 자동 판단한다 (ingest.weight_to_kg)
+# 자동 판단이 틀리는 센서만 적는다. 예: .env 에 GRAM_SENSORS=CDB0,CDE0
 GRAM_SENSORS = {m.strip().upper() for m in os.environ.get("GRAM_SENSORS", "").split(",") if m.strip()}
 
 # 화면의 센서 목록에서 숨기는 센서 MAC (쉼표 구분, 데이터는 DB에 남김). 예: 본 실험과 무관한 예비시험 장치

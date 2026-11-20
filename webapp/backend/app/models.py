@@ -16,6 +16,7 @@ pressure / moisture 테이블은 협력사 MariaDB 스키마와 컬럼명을 맞
     user_session   로그인 세션 (브라우저 쿠키 토큰의 해시, 만료 시각)
     login_failure  로그인 실패 기록 (잠금 판단용, 하루 지나면 지움)
     audit_log      변경 기록 (누가 언제 무엇을 바꿨는지)
+    live_dismissal 대시보드 '새 타설 감지'에서 무시한 후보 (live_detect.py)
 
 각 클래스가 테이블 하나이고, `컬럼명: Mapped[파이썬 타입] = mapped_column(DB 타입)` 한 줄이 컬럼 하나다.
 """
@@ -237,3 +238,13 @@ class AuditLog(Base):
     path: Mapped[str] = mapped_column(String(255))                      # 대상 (예: /api/pours/3)
     status: Mapped[int] = mapped_column(Integer)                        # 결과 (2xx 성공, 4xx 거부)
     detail: Mapped[str | None] = mapped_column(Text)                    # 보낸 내용 (비밀번호는 가림)
+
+
+class LiveDismissal(Base):
+    """대시보드 '새 타설 감지'에서 사람이 '타설 아님'으로 무시한 후보. 같은 후보를 다시 띄우지 않는다."""
+    __tablename__ = "live_dismissal"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    start: Mapped[datetime] = mapped_column(DateTime, index=True)    # 후보 타설 시작 (추정)
+    sensors: Mapped[str] = mapped_column(String(500))                # 함께 오른 센서 (쉼표 구분)
+    login_id: Mapped[str | None] = mapped_column(String(64))
+    at: Mapped[datetime] = mapped_column(DateTime)
