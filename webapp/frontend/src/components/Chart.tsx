@@ -1,5 +1,7 @@
 // 그래프 공통 부품. 모든 그래프는 ECharts 라이브러리로 그리고, 여기서 색·축·툴팁 모양을 맞춘다.
 import ReactECharts from "echarts-for-react";
+import type { ECharts } from "echarts";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // 센서 색은 항상 같은 MAC에 같은 색 (순위가 아니라 대상에 따라)
 // 밝은 업무용 팔레트: 흰 바탕에서 구분되는 중간 채도
@@ -25,9 +27,34 @@ export function useChartTheme() {
   };
 }
 
+type Series = Record<string, unknown>;
+/** 커서 위치 점을 켤 수 있는 선 (점 없이 그린 선) */
+const isDotLine = (s: Series) => s.type === "line" && s.symbol === "none";
+const DOT_SIZE = 9;
+/** 선을 누르면 그 선에만 커서 위치 점이 생긴다 (평소 점은 숨김, 크기 0) */
+function withHoverDot(s: Series, surface: string): Series {
+  if (!isDotLine(s)) return s;
+  return { ...s, symbol: "circle", showSymbol: false, symbolSize: 0, 
+    itemStyle: { ...(s.itemStyle as object), borderColor: surface, borderWidth: 2 },
+    emphasis: { scale: 1.2, ...(s.emphasis as object) } };
+}
+
+/** 십자선 축 라벨: 숫자 값 축이면 fmt 로 (화면별 axisPointer 설정이 있으면 그것을 쓴다) */
+function withPointerLabel(a: unknown, fmt: (v: number) => string): unknown {
+  const one = (x: Series) => (x.type !== "value" && x.type !== undefined) || x.axisPointer ? x
+    : { ...x, axisPointer: { label: { formatter: ({ value }: { value: number }) => fmt(value) } } };
+  return Array.isArray(a) ? a.map(one) : a ? one(a as Series) : a;
+}
+
 /** 공통 축/툴팁 스타일을 입힌 ECharts */
 export function Chart({ option, height = 320 }: { option: Record<string, unknown>; height?: number }) {
   const th = useChartTheme();
+  const ref = useRef<ReactECharts>(null);
+  // 점을 켠 선 이름 (같은 이름의 선은 함께: 비교 그래프의 한 회차 실측·예측 선). 다시 누르면 끈다
+  const [pinned, setPinned] = useState<Set<string>>(new Set());
+  const srcSeries = Array.isArray(option.series) ? (option.series as Series[]) : [];
+  const seriesRef = useRef(srcSeries);
+  seriesRef.current = srcSeries;
   const axis = {
     axisLine: { lineStyle: { color: th.grid } },
     axisLabel: { color: th.text },
@@ -43,9 +70,14 @@ export function Chart({ option, height = 320 }: { option: Record<string, unknown
     grid: { left: 52, right: 20, top: 36, bottom: 56 },
     ...option,
     // 툴팁: 흰 면 · 1px 테두리 · 작은 그림자
+    // 커서 위치 표시 (십자선): 세로 실선 + 가로 점선, 축 끝에 커서 위치 값 라벨
     tooltip: { trigger: "axis", backgroundColor: th.surface, borderWidth: 1, borderColor: "#E1E5EB", padding: [8, 12],
       extraCssText: "border-radius:6px;box-shadow:0 6px 20px rgba(16,24,40,.12);",
       textStyle: { color: th.strong, fontSize: 13 },
+      axisPointer: { type: "cross",
+        lineStyle: { color: th.text, width: 1, type: "solid" },
+        crossStyle: { color: th.text, width: 1, type: "dashed" },
+        label: { backgroundColor: th.strong, color: "#FFFFFF", fontSize: 11, padding: [3, 6], borderRadius: 3 } },
       ...(option.tooltip as object) },
     legend: { textStyle: { color: th.text }, top: 0, type: "scroll", inactiveColor: th.grid,
       ...(option.legend as object) },
@@ -60,7 +92,39 @@ export function Chart({ option, height = 320 }: { option: Record<string, unknown
       ...zoom,
     })) : option.dataZoom,
     xAxis: merge(option.xAxis),
-    yAxis: merge(option.yAxis),
+    yAxis: withPointerLabel(merge(option.yAxis), (v) => v.toFixed(1)),
+    series: Array.isArray(option.series) ? (option.series as Series[]).map((x) => withHoverDot(x, th.surface)) : option.series,
   };
-  return <ReactECharts option={base} style={{ height, width: "100%" }} notMerge lazyUpdate />;
+  // 점 크기만 바꿔 덧입힌다 (전체 옵션을 다시 넣으면 확대 상태가 풀리므로)
+  useEffect(() => {
+    const chart = ref.current?.getEchartsInstance();
+    if (!chart) return;
+    chart.setOption({ series: srcSeries.map((x) => (isDotLine(x) ? { symbolSize: pinned.has(String(x.name)) ? DOT_SIZE : 0 } : {})) });
+  });
+  // 선 근처(12px)를 누르면 가장 가까운 선의 점을 켜고 끈다. 얇은 선을 정확히 누르지 않아도 되게 화면 좌표로 찾는다
+  const onChartReady = useCallback((chart: ECharts) => {
+    chart.getZr().on("click", (e: { offsetX: number; offsetY: number }) => {
+      let best: { name: string; d: number } | null = null;
+      seriesRef.current.forEach((x, i) => {
+        if (!isDotLine(x) || !Array.isArray(x.data)) return;
+        let near: number[] | null = null;
+        for (const d of x.data as unknown[]) {
+          const pt = chart.convertToPixel({ seriesIndex: i }, d as number[]) as number[] | undefined;
+          if (!pt || pt.some((v) => !Number.isFinite(v))) continue;
+          if (!near || Math.abs(pt[0] - e.offsetX) < Math.abs(near[0] - e.offsetX)) near = pt;
+        }
+        if (!near || Math.abs(near[0] - e.offsetX) > 12) return;
+        const dist = Math.abs(near[1] - e.offsetY);
+        if (dist <= 12 && (!best || dist < best.d)) best = { name: String(x.name), d: dist };
+      });
+      const hit = best as { name: string; d: number } | null;
+      if (!hit) return;
+      setPinned((cur) => {
+        const next = new Set(cur);
+        if (next.has(hit.name)) next.delete(hit.name); else next.add(hit.name);
+        return next;
+      });
+    });
+  }, []);
+  return <ReactECharts ref={ref} option={base} style={{ height, width: "100%" }} notMerge lazyUpdate onChartReady={onChartReady} />;
 }

@@ -18,6 +18,8 @@ export function pourColor(index: number) {
 
 const day = (h: number) => +(h / 24).toFixed(3);
 const f1 = (v: number | null | undefined) => (v == null ? "—" : v.toFixed(1));
+/** 십자선 x축 라벨: 타설 후 경과 (예: 30시간, 12.4일) */
+const dayPointer = { snap: true, label: { formatter: ({ value }: { value: number }) => fmtAge(value * 24) } };
 
 /** 가로축 끝(일): 기본 30일, 공시체를 그보다 늦게 깼으면 그 점까지 보이게 하루 단위로 늘린다 */
 function xMaxDay(preds: Prediction[]) {
@@ -102,7 +104,7 @@ export function StrengthChart({ pred, height = 380, compact = false, yMax }: {
       },
     },
     legend: { show: !compact, data: ["최초 예측", "실측 기반 추정", "수정 예측", "목표 강도", "공시체"], tooltip: legendTip },
-    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: xMaxDay([pred]), interval: 7 },
+    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 28, min: 0, max: xMaxDay([pred]), interval: 7 },
     yAxis: { type: "value", name: "MPa", min: 0, max: yMax },
     dataZoom: compact ? [] : [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
     series: [
@@ -168,10 +170,20 @@ export function CompareStrengthChart({ items, height = 400 }: { items: CompareIt
   });
   const option = {
     grid: { left: 56, right: 24, top: 40, bottom: 76 },
-    tooltip: { trigger: "item", formatter: (p: { seriesName: string; value: number[] }) =>
-      `${p.seriesName} · 타설 후 ${p.value[0].toFixed(1)}일<br/><b>${f1(p.value[1])} MPa</b>` },
+    // 커서 위치의 회차별 강도 (같은 회차의 실측·예측 선은 한 줄로, 공시체는 커서 근처일 때만)
+    tooltip: { trigger: "axis", formatter: (ps: { seriesName: string; seriesType: string; value: number[]; marker: string; axisValue: number }[]) => {
+      if (!ps.length) return "";
+      const x = ps[0].axisValue;
+      const seen = new Set<string>();
+      const rows = ps.filter((p) => {
+        if (p.seriesType === "scatter") return Math.abs(p.value[0] - x) < 0.3;
+        if (seen.has(p.seriesName) || Math.abs(p.value[0] - x) > 0.5) return false;
+        seen.add(p.seriesName); return true;
+      }).map((p) => `${p.marker}${p.seriesName}${p.seriesType === "scatter" ? " 공시체" : ""} <b>${f1(p.value[1])} MPa</b>`);
+      return [`<b>타설 후 ${fmtAge(x * 24)}</b>`, ...rows].join("<br/>");
+    } },
     legend: { data: items.map((i) => i.name) },
-    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7 },
+    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 28, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7 },
     yAxis: { type: "value", name: "MPa", min: 0 },
     dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
     series: [...series,
@@ -189,7 +201,7 @@ export function TempChart({ pred, height = 220, compact = false }: { pred: Predi
     grid: compact ? { left: 36, right: 12, top: 16, bottom: 24 } : undefined,
     tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ℃`) },
     legend: { show: !compact, data: ["관측", "가정"], tooltip: legendTip },
-    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", nameGap: 28, min: 0, max: xMaxDay([pred]), interval: compact ? 14 : 7 },
+    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 28, min: 0, max: xMaxDay([pred]), interval: compact ? 14 : 7 },
     yAxis: { type: "value", name: "℃", scale: true },
     series: [
       { name: "관측", type: "line", symbol: "none", lineStyle: { width: 1.5, color: LINE.tempObserved }, itemStyle: { color: LINE.tempObserved },
@@ -207,7 +219,7 @@ export function CompareTempChart({ items, height = 200 }: { items: CompareItem[]
     grid: { left: 56, right: 24, top: 32, bottom: 40 },
     tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ℃`) },
     legend: { data: items.map((i) => i.name) },
-    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", nameGap: 24, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7 },
+    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 24, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7 },
     yAxis: { type: "value", name: "℃", scale: true },
     series: items.map(({ pred, name, color }) => ({
       name, type: "line", symbol: "none", lineStyle: { width: 1.5, color }, itemStyle: { color },
