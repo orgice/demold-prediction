@@ -52,6 +52,8 @@ export default function Dashboard() {
   const [prev, setPrev] = useState<number[]>([]);                         // 이전 회차 선택
   const [view, setView] = useState<View>(readView);
   const [bell, setBell] = useState(false);
+  const [kpiOpen, setKpiOpen] = useState(false);   // 예측 강도·보정 카드 (기본 접힘, 한 번 누르면 모든 회차가 같이 열림)
+  const kpi = { open: kpiOpen, toggle: () => setKpiOpen((o) => !o) };
   const [creating, setCreating] = useState(false);
   const canEdit = useCanEdit();   // 보기 계정에게는 '새 타설 등록'을 숨긴다
   const [preds, setPreds] = useState<Record<number, PredState>>({});
@@ -156,8 +158,8 @@ export default function Dashboard() {
             </div>
           </div>
           {view === "overlay"
-            ? <Overlay items={items} colorOf={colorOf} demo={demo} />
-            : <Separate items={items} colorOf={colorOf} demo={demo} />}
+            ? <Overlay items={items} colorOf={colorOf} demo={demo} kpi={kpi} />
+            : <Separate items={items} colorOf={colorOf} demo={demo} kpi={kpi} />}
           <div className="tiny">예측값은 참고 정보입니다. 거푸집 해체 승인은 현장 시공 측이 합니다.</div>
         </>
       )}
@@ -305,6 +307,8 @@ function PrevPicker({ previous, picked, onChange }: { previous: Pour[]; picked: 
 
 // ---------------- 회차 요약 ----------------
 type Item = { pour: Pour; state: PredState };
+/** 예측 강도·보정 카드의 접힘 상태 (모든 회차 카드가 함께 쓴다) */
+type Fold = { open: boolean; toggle: () => void };
 
 function PourName({ pour, demo, color }: { pour: Pour; demo: boolean; color?: string }) {
   return (
@@ -315,8 +319,22 @@ function PourName({ pour, demo, color }: { pour: Pour; demo: boolean; color?: st
   );
 }
 
-function Kpis({ pred, compact = false }: { pred: Prediction; compact?: boolean }) {
+/** 예측 강도·보정 카드: 기본 접힘. 한 곳을 누르면 화면의 모든 회차 카드가 같이 열리고 닫힌다 (kpiOpen 은 대시보드가 갖는다) */
+function Kpis({ pred, compact = false, open, onToggle }: { pred: Prediction; compact?: boolean; open: boolean; onToggle: () => void }) {
   const ratio = pred.design_ratio_28d;
+  return (
+    <div className="kpi-fold">
+      <button className="kpi-fold-head" aria-expanded={open} onClick={onToggle}>
+        {CHEVRON}
+        <span className="kpi-fold-h">{compact ? "예측 강도" : "예측 강도·보정"}</span>
+        {!open && <span className="kpi-fold-sum">현재 {pred.current_strength.toFixed(1)} · 28일 {pred.strength_28d.toFixed(1)} MPa</span>}
+      </button>
+      {open && <KpiGrid pred={pred} compact={compact} ratio={ratio} />}
+    </div>
+  );
+}
+
+function KpiGrid({ pred, compact, ratio }: { pred: Prediction; compact: boolean; ratio: number | null | undefined }) {
   return (
     <div className={`grid kpis ${compact ? "kpis-2" : ""}`}>
       <div className="kpi">
@@ -384,8 +402,8 @@ function PredFallback({ state }: { state: PredState }) {
 }
 
 /** 큰 그래프 카드 (겹쳐 보기 회차 1개, 회차별 보기 1개·4개일 때 맨 위) */
-function BigCard({ item: it, color, demo, open, onToggle, yMax }: {
-  item: Item; color?: string; demo: boolean; open: boolean; onToggle: () => void; yMax?: number;
+function BigCard({ item: it, color, demo, open, onToggle, yMax, kpi }: {
+  item: Item; color?: string; demo: boolean; open: boolean; onToggle: () => void; yMax?: number; kpi: Fold;
 }) {
   const pred = it.state.data;
   return (
@@ -393,7 +411,7 @@ function BigCard({ item: it, color, demo, open, onToggle, yMax }: {
       <SummaryHead item={it} color={color} demo={demo} open={open} onToggle={onToggle} />
       {pred ? (
         <>
-          <Kpis pred={pred} />
+          <Kpis pred={pred} open={kpi.open} onToggle={kpi.toggle} />
           <Milestones pred={pred} open={open} />
           <div>
             <h3>압축강도 예측 비교</h3>
@@ -410,7 +428,7 @@ function BigCard({ item: it, color, demo, open, onToggle, yMax }: {
 }
 
 // ---------------- 겹쳐 보기 ----------------
-function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number) => string; demo: boolean }) {
+function Overlay({ items, colorOf, demo, kpi }: { items: Item[]; colorOf: (id: number) => string; demo: boolean; kpi: Fold }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const toggle = (id: number) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   if (items.length === 0) return null;
@@ -418,7 +436,7 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
   // 회차 하나: 상세와 같은 요약 + 그래프
   if (items.length === 1) {
     const it = items[0];
-    return <BigCard item={it} demo={demo} open={!!open[it.pour.id]} onToggle={() => toggle(it.pour.id)} />;
+    return <BigCard item={it} demo={demo} open={!!open[it.pour.id]} onToggle={() => toggle(it.pour.id)} kpi={kpi} />;
   }
 
   // 여러 회차: 같은 경과일 축
@@ -453,7 +471,7 @@ function Overlay({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number
 // ---------------- 회차별 보기 ----------------
 // 1개: 겹쳐 보기와 같은 큰 그래프 / 2개: 절반씩 / 3개: 3분의 1씩
 // 4개 이상(이전 회차 3개, 또는 진행 회차가 여럿): 기준 회차를 맨 위 큰 그래프로, 나머지는 아래 3분의 1씩
-function Separate({ items, colorOf, demo }: { items: Item[]; colorOf: (id: number) => string; demo: boolean }) {
+function Separate({ items, colorOf, demo, kpi }: { items: Item[]; colorOf: (id: number) => string; demo: boolean; kpi: Fold }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const toggle = (id: number) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   if (items.length === 0) return null;
@@ -469,7 +487,7 @@ function Separate({ items, colorOf, demo }: { items: Item[]; colorOf: (id: numbe
   return (
     <div className="stack loose">
       {top && <BigCard item={top} color={items.length > 1 ? colorOf(top.pour.id) : undefined} demo={demo}
-        open={!!open[top.pour.id]} onToggle={() => toggle(top.pour.id)} yMax={items.length > 1 ? yMax : undefined} />}
+        open={!!open[top.pour.id]} onToggle={() => toggle(top.pour.id)} yMax={items.length > 1 ? yMax : undefined} kpi={kpi} />}
       {rest.length > 0 && (
         <div className={`grid sep-grid sep-${cols}`}>
           {rest.map((it) => {
@@ -480,7 +498,7 @@ function Separate({ items, colorOf, demo }: { items: Item[]; colorOf: (id: numbe
                   onToggle={() => toggle(it.pour.id)} />
                 {pred ? (
                   <>
-                    <Kpis pred={pred} compact />
+                    <Kpis pred={pred} compact open={kpi.open} onToggle={kpi.toggle} />
                     <Milestones pred={pred} open={!!open[it.pour.id]} />
                     <div>
                       <h3 className="small">압축강도 예측</h3>

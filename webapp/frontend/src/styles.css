@@ -349,6 +349,14 @@ tbody tr:hover { background: var(--hover); }
 .sep-grid.sep-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1080px) { .sep-grid.sep-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .sep-grid.sep-2, .sep-grid.sep-3 { grid-template-columns: minmax(0, 1fr); } }
+/* 예측 강도·보정 카드 접기 (기본 접힘) */
+.kpi-fold { display: flex; flex-direction: column; gap: 10px; }
+.kpi-fold-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-m); background: var(--surface-2); font: inherit; color: var(--text-2); text-align: left; cursor: pointer; }
+.kpi-fold-head:hover { background: var(--hover); color: var(--text); }
+.kpi-fold-h { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--text); }
+.kpi-fold-sum { font-size: 13px; line-height: 18px; color: var(--text-2); font-variant-numeric: tabular-nums; margin-left: auto;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grid.kpis.kpis-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .kpis-2 .kpi, .card .kpis-2 .kpi { background: var(--surface-2); border-color: transparent; padding: 10px 12px; }
 .kpis-2 .kpi .value { font-size: 22px; line-height: 28px; }
@@ -432,8 +440,8 @@ tbody tr:hover { background: var(--hover); }
 
 /* ---------- 로그인 · 사용자 관리 (⚠ 백엔드 미연동 목업 화면, 2026-11-17 추가) ---------- */
 .topbar-user { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
-.topbar-name { font-size: 14px; font-weight: 600; color: var(--text); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-a.topbar-name:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.badge.topbar-chip { height: 28px; padding: 0 10px; font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; display: inline-block; line-height: 28px; text-decoration: none; }
+.badge.topbar-chip:hover { text-decoration: none; filter: brightness(0.96); }
 .account-page { max-width: 760px; width: 100%; }
 .account-ro { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .account-ro > div { display: flex; flex-direction: column; gap: 6px; }
