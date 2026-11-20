@@ -2,7 +2,8 @@
 //   ① 진행 중 회차 배너·선택   ② 이전 회차 선택 (검색·전체 선택·선택 해제·개별 선택, 최대 3개)
 //   ③ 겹쳐 보기 / 회차별 보기 (회차별: 1개 = 큰 그래프, 2개 = 절반씩, 3개 = 3분의 1씩, 4개 = 기준 회차 큰 그래프 + 아래 3개)
 //      ④ 회차 요약 (현재·28일·보정) + ▸ 기준 강도 도달 예상 시점
-//   ⑤ 종 아이콘 = 강도 알림 패널 (해체 기준 도달 하루 전 → 메일 자동 발송 또는 초안. 숫자 = 아직 안 보낸 알림)
+//   ⑤ 종 아이콘 = 알림 패널: 강도 알림(해체 기준 도달 하루 전 → 메일 자동 발송 또는 초안) + 확인 필요(빠진 입력, 메일과 무관)
+//      숫자 = 아직 안 보낸 강도 알림 + 확인 필요 항목
 //   ⑥ 새 타설 감지 (맨 위): 실시간 수집 센서에서 찾은 미등록 타설 → 확인 후 회차로 등록 (components/LiveCandidates.tsx)
 // 진행 중 회차 = 타설 후 28일이 지나지 않은 회차. 센서 데이터는 10분마다 자동 수집되므로(delta_sync.py)
 // 화면도 10분마다 회차와 예측을 다시 불러온다 (탭이 보일 때만).
@@ -126,23 +127,27 @@ export default function Dashboard() {
 
   const items = selectedIds.map((id) => ({ pour: byId.get(id)!, state: preds[id] ?? {} }));
   const alerts = buildAlerts(items);
+  const checks = demo ? [] : checkItems(active);   // 예시 화면에서는 확인 필요를 만들지 않는다
+  const count = alerts.unsent + checks.length;
 
   return (
     <main className="page">
-      <DashHead demo={demo} bell={bell} count={alerts.unsent} onBell={() => setBell((b) => !b)}
+      <DashHead demo={demo} bell={bell} count={count} onBell={() => setBell((b) => !b)}
         onExitDemo={() => { setDemo(false); setPreds({}); setMainSel(null); setPrev([]); }}
         onCreate={sorted.length > 0 && !demo && canEdit ? () => setCreating(true) : undefined} />
-      {bell && <AlertPanel alerts={alerts} demo={demo}
+      {bell && <AlertPanel alerts={alerts} checks={checks} demo={demo}
         onSent={(p) => pours.setData((xs) => xs?.map((x) => (x.id === p.id ? p : x)) ?? xs)} />}
-      {/* 아직 메일 초안을 열지 않은 알림이 있으면 종을 열지 않아도 본문 상단에 한 줄 요약 (DESIGN.md 8장 5) */}
-      {!bell && alerts.unsent > 0 && (
+      {/* 아직 메일 초안을 열지 않은 알림이나 확인 필요 항목이 있으면 종을 열지 않아도 본문 상단에 한 줄 요약 (DESIGN.md 8장 5) */}
+      {!bell && count > 0 && (
         <div className="alert warn alert-inline">
-          <span><span className="ico" aria-hidden="true">⚠</span> 선택한 회차에 확인할 강도 알림 {alerts.unsent}건이 있어요.</span>
+          <span><span className="ico" aria-hidden="true">⚠</span> {[
+            alerts.unsent > 0 && `선택한 회차에 확인할 강도 알림 ${alerts.unsent}건`,
+            checks.length > 0 && `진행 중 회차에 확인 필요 ${checks.length}건`,
+          ].filter(Boolean).join(", ")}이 있어요.</span>
           <button className="btn sm" onClick={() => setBell(true)}>알림 보기</button>
         </div>
       )}
       {!demo && <LiveCandidates onRegistered={(p) => { pours.reload(); setMainSel(p.id); }} />}
-      {!demo && <CheckList pours={active} />}
 
       {sorted.length === 0 ? (
         <div className="card empty">
@@ -190,7 +195,7 @@ function DashHead({ demo, bell, count, onBell, onExitDemo, onCreate }: {
       <div className="row nowrap">
         <h1>시험 강도 대시보드</h1>
         <button className={`icon-btn ${bell ? "on" : ""}`} onClick={onBell} aria-expanded={bell}
-          aria-label={`강도 알림${count ? ` ${count}건` : ""}`} title="강도 알림">
+          aria-label={`알림${count ? ` ${count}건` : ""}`} title="알림 (강도 알림 · 확인 필요)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
           </svg>
@@ -255,28 +260,37 @@ function Banner({ active, sorted, mainIds, mainSel, onPick, demo }: {
 }
 
 // ---------------- 확인 필요 ----------------
-/** 진행 중 회차의 빠진 입력을 모아 해당 입력 탭으로 바로 보낸다 (DESIGN.md 12.1) */
-function CheckList({ pours }: { pours: Pour[] }) {
-  const items = pours.flatMap((p) => [
+// 진행 중 회차의 빠진 입력. 종 아이콘 알림 패널에 강도 알림과 함께 보여 주지만 메일과는 무관하다
+// (보냄 기록 없음: 입력하면 사라진다). 해당 입력 탭으로 바로 보낸다 (DESIGN.md 12.1)
+interface CheckItem { pour: Pour; text: string; tab: string; action: string }
+
+function checkItems(pours: Pour[]): CheckItem[] {
+  return pours.flatMap((p) => [
     !p.pour_start && { pour: p, text: "타설 시각 미확정", tab: "pourtime", action: "타설 시점 확인" },
     p.test_count === 0 && { pour: p, text: "공시체 미입력", tab: "tests", action: "공시체 결과 입력" },
     !p.member && { pour: p, text: "부재 미설정", tab: "settings", action: "부재 설정" },
-  ].filter((x): x is { pour: Pour; text: string; tab: string; action: string } => !!x));
-  if (items.length === 0) return null;
+  ].filter((x): x is CheckItem => !!x));
+}
+
+function CheckSection({ items }: { items: CheckItem[] }) {
   return (
-    <section className="card" aria-label="확인 필요">
-      <div className="card-head"><h3>확인 필요 <span className="badge warn">{items.length}</span></h3>
+    <div className="stack panel-sec" role="group" aria-label="확인 필요">
+      <div className="card-head"><h3>확인 필요 {items.length > 0 && <span className="badge warn">{items.length}</span>}</h3>
         <span className="tiny">진행 중 회차 기준 · 입력하면 예측이 다시 계산됩니다</span></div>
-      <div className="check-list">
-        {items.map((it) => (
-          <div key={`${it.pour.id}-${it.tab}`} className="check-row">
-            <span className="check-name">{title(it.pour)}</span>
-            <span className="badge warn">{it.text}</span>
-            <Link to={`/pours/${it.pour.id}?tab=${it.tab}`} className="btn sm">{it.action}</Link>
+      {items.length === 0
+        ? <div className="muted small">진행 중 회차에 빠진 입력이 없습니다.</div>
+        : (
+          <div className="check-list">
+            {items.map((it) => (
+              <div key={`${it.pour.id}-${it.tab}`} className="check-row">
+                <span className="check-name">{title(it.pour)}</span>
+                <span className="badge warn">{it.text}</span>
+                <Link to={`/pours/${it.pour.id}?tab=${it.tab}`} className="btn sm">{it.action}</Link>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    </section>
+        )}
+    </div>
   );
 }
 
@@ -549,7 +563,7 @@ function buildAlerts(items: Item[]): Alerts {
 
 const ALERT_ICON: Record<AlertItem["kind"], string> = { dayBefore: "⏰" };
 
-function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; onSent: (p: Pour) => void }) {
+function AlertPanel({ alerts, checks, demo, onSent }: { alerts: Alerts; checks: CheckItem[]; demo: boolean; onSent: (p: Pour) => void }) {
   const canEdit = useCanEdit();   // 받는 사람은 회차 설정(편집 권한)에서 정한다
   // 서버 SMTP 자동 발송이 켜져 있으면 받는 사람이 있는 진행 중 회차는 서버가 바로 보낸다 (backend notify.py)
   const ns = useAsync(() => (demo ? Promise.resolve(null) : api.notifyStatus()), [demo]);
@@ -560,8 +574,9 @@ function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; o
     api.recordNotice(a.pour.id, { key: a.key, milestones: milestoneSnapshot(a.pred) }).then(onSent).catch(() => undefined);
   };
   return (
-    <section className="card stack" aria-label="강도 알림">
-      <h3>강도 알림
+    <section className="card stack" aria-label="알림">
+      <div className="stack" role="group" aria-label="강도 알림">
+      <h3>강도 알림 {alerts.unsent > 0 && <span className="badge warn">{alerts.unsent}</span>}
         <Info align="right">{auto
           ? `부재 해체 기준 강도에 도달하기 하루 전에 알립니다. 서버가 ${ns.data!.interval_min}분마다 확인해, 받는 사람이 정해진 회차(타설 후 28일 이내)는 메일로 자동 발송합니다. 받는 사람이 없는 회차는 메일 초안 열기로 직접 보냅니다. 받는 사람은 회차 설정에서 정합니다.`
           : "부재 해체 기준 강도에 도달하기 하루 전에 알립니다. 메일 초안 열기를 누르면 기본 메일 앱에 받는 사람·제목·본문이 채워진 초안이 열립니다. 발송은 내용을 확인한 뒤 직접 합니다. 받는 사람은 회차 설정에서 정합니다."}</Info>
@@ -599,6 +614,8 @@ function AlertPanel({ alerts, demo, onSent }: { alerts: Alerts; demo: boolean; o
           );
         })}
       </div>
+      </div>
+      {!demo && <CheckSection items={checks} />}
     </section>
   );
 }
