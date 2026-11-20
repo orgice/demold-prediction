@@ -34,10 +34,13 @@ function UserBox() {
   const onLogin = useLocation().pathname === "/login";
   if (!ready || (!user && onLogin)) return null;
   if (!user) return <div className="topbar-user"><Link className="btn sm" to="/login">로그인</Link></div>;
+  const roleLabel = ROLE_INFO[user.role].label;
   return (
     <div className="topbar-user">
-      <Link className="topbar-name" to="/account" title={`내 계정 (${user.id})`}>{user.name}</Link>
-      <span className={`badge role-${user.role}`}>{ROLE_INFO[user.role].label}</span>
+      {/* 이름과 권한을 권한 색 칩 하나로 (이름이 권한 이름과 같으면 한 번만) */}
+      <Link className={`badge topbar-chip role-${user.role}`} to="/account" title={`내 계정 (${user.id}) · ${roleLabel} 권한`}>
+        {user.name === roleLabel ? user.name : `${user.name} · ${roleLabel}`}
+      </Link>
       <button className="btn sm" onClick={async () => { await logout(); nav("/login"); }}>로그아웃</button>
     </div>
   );
