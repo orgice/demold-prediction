@@ -47,6 +47,8 @@ ACTIONS: list[tuple[str, str, str]] = [
     ("POST", r"/api/notify/test", "알림 메일 시험 발송"),
     ("POST", r"/api/notify/run", "알림 메일 지금 확인"),
     ("POST", r"/api/delta/run", "센서 데이터 지금 수집"),
+    ("POST", r"/api/live/candidates/register", "감지된 타설 회차 등록"),
+    ("POST", r"/api/live/candidates/dismiss", "감지된 타설 무시"),
 ]
 SKIP = re.compile(r"^/api/agent/")          # AI 상담 질문은 기록하지 않음
 SECRET_KEYS = {"password", "current_password", "new_password"}

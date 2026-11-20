@@ -31,6 +31,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
 from .config import GRAM_SENSORS, PRESSURE_OUTLIER_KG, TEMP_MISSING
+from .ingest import weight_to_kg
 
 STEP_KG = 3.0            # 이보다 작은 상승은 타설로 보지 않음
 BASE_WINDOW = 30         # 분: 상승 기준이 되는 직전 최저값 구간
@@ -51,8 +52,7 @@ def load_pressure_minutes(engine: Engine, macs: list[str], start: datetime, end:
     d = pd.read_sql(q, engine, params={"macs": macs, "a": start, "b": end})
     if d.empty:
         return pd.DataFrame()
-    d["weight"] = pd.to_numeric(d.weight, errors="coerce")
-    d["kg"] = np.where(d.mac.isin(GRAM_SENSORS), d.weight / 1000, d.weight)
+    d["kg"] = weight_to_kg(d)   # g 단위는 센서·날짜별 자동 판단 (ingest.py)
     d = d[d.kg.abs() <= PRESSURE_OUTLIER_KG]
     return d.set_index("timestamp").groupby("mac").kg.resample("1min").median().unstack(0)
 

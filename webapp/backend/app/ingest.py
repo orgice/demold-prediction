@@ -35,6 +35,25 @@ INT_COLS = {"press", "rawMo", "uf", "mo_r"}     # 정수로 저장하는 컬럼
 BATCH = 20000                                    # DB에 한 번에 넣는 행 수 (큰 파일을 나눠 넣음)
 
 
+GRAM_SHARE = 0.2          # 하루 값 중 이 비율 이상이 g 범위면 그날 그 센서는 g 단위로 본다
+GRAM_RANGE = (60, 60_000)  # g 범위: kg 로는 나올 수 없고(60 kg 초과) g 로는 60 kg 이하인 값
+
+
+def weight_to_kg(d: pd.DataFrame) -> pd.Series:
+    """측압 weight 를 kg 로. 단위는 센서·날짜마다 자동 판단한다 (GRAM_SENSORS 에 적힌 센서는 항상 g).
+
+    협력사 센서는 kg 로 보내다가 펌웨어가 바뀌며 g 로 바뀐다 (2026-10 중순 9288·A3E0, CDB0·CDE0·640xxx 는 처음부터 g).
+    kg 센서는 60 kg 을 넘지 않으므로, 그날 값의 GRAM_SHARE 이상이 60~60000 이면 g 로 본다.
+    d: mac, timestamp, weight. 반환: kg (범위 밖 오류값 제거는 부르는 쪽에서)."""
+    w = pd.to_numeric(d.weight, errors="coerce").astype(float)
+    a = w.abs()
+    in_g = ((a > GRAM_RANGE[0]) & (a <= GRAM_RANGE[1])).astype(float).where(w.notna())
+    day = pd.to_datetime(d.timestamp).dt.normalize()
+    share = in_g.groupby([d.mac, day]).transform("mean")
+    grams = d.mac.isin(GRAM_SENSORS) | (share >= GRAM_SHARE)
+    return w.where(~grams, w / 1000)
+
+
 class IngestError(ValueError):
     """CSV 형식이 맞지 않을 때. 화면에 문구 그대로 보인다."""
     pass
@@ -104,8 +123,8 @@ def _aggregate_pressure(d: pd.DataFrame) -> pd.DataFrame:
         # 외기: 온도·습도가 둘 다 0이면 수신 실패로 보고 뺀다
         temp_out=d.temp.where(~((d.temp == 0) & (d.humi == 0))),
         humi=d.humi.where(~((d.temp == 0) & (d.humi == 0))),
-        # 측압: g 단위 센서는 kg로 환산
-        weight_kg=np.where(d.mac.isin(GRAM_SENSORS), d.weight / 1000, d.weight),
+        # 측압: g 단위(센서·날짜별 자동 판단)는 kg로 환산
+        weight_kg=weight_to_kg(d),
         # 수분: rawMo가 4095(미연결)면 뺀다
         c_mo=d.c_mo.where(d.rawMo < RAWMO_MISSING),
     )

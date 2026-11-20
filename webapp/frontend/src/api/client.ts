@@ -171,6 +171,13 @@ export interface DeltaStatus {
   last_inserted: Record<string, number>; token_expires: string | null;
 }
 
+/** 대시보드 '새 타설 감지' 후보 (backend live_detect.py). events.at 은 "HH:MM" */
+export interface LiveCandidate {
+  key: string; start: string; end: string; sensors: string[]; rise_kg: number; temp_jump: boolean; score: number;
+  events: { at: string; mac: string; kg: number }[];
+}
+export interface LiveCandidates { checked_at: string; live_sensors: string[]; free_sensors: string[]; candidates: LiveCandidate[] }
+
 /** 변경 기록 한 줄 (백엔드 audit.py). detail 은 JSON 문자열:
  *  {"changes":[{field,label,before,after}]} (수정 전→후) / {"deleted":{항목:값}} / 보낸 내용 그대로 */
 export interface HistoryEntry {
@@ -256,6 +263,11 @@ export const api = {
     request<Pour>(`/api/pours/${id}/notice`, json("POST", body)),
   // 알림 메일 자동 발송 상태 (routers/notify.py)
   notifyStatus: () => request<NotifyStatus>("/api/notify/status"),
+  // 새 타설 감지 (routers/live.py). 등록·무시는 편집 이상
+  liveCandidates: () => request<LiveCandidates>("/api/live/candidates"),
+  registerCandidate: (body: { key: string; name: string; member: Member | null; design_strength: number | null }) =>
+    request<Pour>("/api/live/candidates/register", json("POST", body)),
+  dismissCandidate: (key: string) => request<void>("/api/live/candidates/dismiss", json("POST", { key })),
   // 센서 데이터 자동 수집 (routers/delta.py). 지금 수집은 관리자만
   deltaStatus: () => request<DeltaStatus>("/api/delta/status"),
   runDelta: () => request<DeltaStatus & { result: Record<string, number> }>("/api/delta/run", { method: "POST" }),
