@@ -9,6 +9,7 @@
 //   /login       로그인         pages/Login.tsx
 //   /account     내 계정        pages/MyAccount.tsx   (로그인한 모든 사용자, 상단 이름을 누르면 이동)
 //   /admin/users 사용자 관리    pages/AdminUsers.tsx  (관리자만 메뉴가 보임)
+//   /admin/audit 변경 기록      pages/AdminAudit.tsx  (관리자만. 회차별 기록은 회차 상세 › 설정 탭)
 // 로그인 상태는 auth/AuthContext.tsx. 로그인하지 않으면 로그인 화면만 보인다.
 // 서버와 주고받는 함수는 api/client.ts 에 모여 있다.
 import React from "react";
@@ -17,6 +18,7 @@ import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, use
 import { AuthProvider, RequireAuth, useAuth } from "./auth/AuthContext";
 import BrandLogo from "./components/BrandLogo";
 import { ROLE_INFO } from "./auth/roles";
+import AdminAudit from "./pages/AdminAudit";
 import AdminUsers from "./pages/AdminUsers";
 import Assistant from "./pages/Assistant";
 import Login from "./pages/Login";
@@ -62,6 +64,7 @@ function Shell() {
             <NavLink to="/sensors">센서 데이터</NavLink>
             <NavLink to="/assistant">AI 상담</NavLink>
             {user?.role === "admin" && <NavLink to="/admin/users">사용자 관리</NavLink>}
+            {user?.role === "admin" && <NavLink to="/admin/audit">변경 기록</NavLink>}
           </nav>
         )}
         <UserBox />
@@ -77,6 +80,7 @@ function Shell() {
         <Route path="/upload" element={<Navigate to="/sensors" replace />} />
         <Route path="/account" element={<RequireAuth role="viewer"><MyAccount /></RequireAuth>} />
         <Route path="/admin/users" element={<RequireAuth role="admin"><AdminUsers /></RequireAuth>} />
+        <Route path="/admin/audit" element={<RequireAuth role="admin"><AdminAudit /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
