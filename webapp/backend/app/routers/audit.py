@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import require_role
 from ..db import get_session
-from ..models import AuditLog
+from ..models import AppUser, AuditLog
 
 router = APIRouter(prefix="/api/audit", tags=["변경 기록"])
 
@@ -20,6 +20,7 @@ class AuditOut(BaseModel):
     id: int
     at: datetime
     user: str | None
+    user_name: str | None     # 지금 계정 이름 (삭제된 계정·system 이면 없음)
     ip: str | None
     action: str
     method: str
@@ -45,6 +46,9 @@ def list_audit(user: str | None = None, action: str | None = None, target: str |
         q = q.where(AuditLog.at >= since)
     if until:
         q = q.where(AuditLog.at < until)
-    return [AuditOut(id=a.id, at=a.at, user=a.login_id, ip=a.ip, action=a.action, method=a.method,
+    rows = list(db.scalars(q))
+    names = dict(db.execute(select(AppUser.login_id, AppUser.name)
+                            .where(AppUser.login_id.in_({a.login_id for a in rows if a.login_id}))).all())
+    return [AuditOut(id=a.id, at=a.at, user=a.login_id, user_name=names.get(a.login_id), ip=a.ip, action=a.action, method=a.method,
                      target=a.path, status=a.status, ok=200 <= a.status < 400, detail=a.detail)
-            for a in db.scalars(q)]
+            for a in rows]

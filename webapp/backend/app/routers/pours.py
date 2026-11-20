@@ -7,24 +7,52 @@
 - /pour-day     타설일 측압 그래프
 - /tests        공시체 결과 입력·수정·삭제
 - /exclusions   예측 계산에서 뺄 측정 구간 (원본 데이터는 그대로)
+- /history      이 회차의 변경 기록 (편집 권한 이상). 수정·삭제는 바뀌기 전→후 값을 audit_log 에 남긴다
 
 데이터가 바뀌는 API는 끝에 maturity.clear_cache()를 불러 예측을 새로 계산하게 한다.
 """
 import json
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import criteria, maturity, notify
+from .. import audit, criteria, maturity, notify
+from ..auth import require_role
 from ..db import engine, get_session
-from ..models import ExcludedRange, Pour, StrengthTest
+from ..models import AppUser, AuditLog, ExcludedRange, Pour, StrengthTest
 from ..pour_detect import detect_pour, load_pressure_minutes
 from ..schemas import (ExclusionIn, ExclusionOut, NoticeIn, NoticeOut, PourIn, PourOut, PourPatch, StrengthTestIn,
                        StrengthTestOut)
 
 router = APIRouter(prefix="/api/pours", tags=["타설"])
+
+# 변경 기록에 보일 항목 이름 (화면의 입력 칸 이름과 맞춘다)
+POUR_LABELS = {
+    "name": "이름", "site": "현장", "pour_start": "타설 시작", "pour_end": "타설 종료",
+    "design_strength": "설계기준강도 (MPa)", "member": "부재 종류", "structure": "구조 형식",
+    "durable": "내구성 중요 구조물", "removal_override": "해체 기준 직접 입력 (MPa)",
+    "removal_override_reason": "해체 기준 사유", "sensors": "연결 센서", "note": "메모",
+    "notify_emails": "알림 받을 메일",
+}
+TEST_LABELS = {
+    "test_datetime": "시험 시각", "nominal_age_day": "재령 (일)", "curing": "양생",
+    "s1": "강도 (MPa)", "s2": "강도 2 (MPa)", "s3": "강도 3 (MPa)", "note": "메모",
+}
+
+
+def pour_values(p: Pour) -> dict:
+    """변경 기록용: 회차의 지금 값 (센서는 목록으로)."""
+    return {k: (p.sensor_list if k == "sensors" else getattr(p, k)) for k in POUR_LABELS}
+
+
+CURING_LABEL = {"field": "현장양생", "water": "수중양생"}
+
+
+def test_values(t: StrengthTest) -> dict:
+    return {k: (CURING_LABEL.get(t.curing, t.curing) if k == "curing" else getattr(t, k)) for k in TEST_LABELS}
 
 
 def to_out(p: Pour) -> PourOut:
@@ -95,9 +123,10 @@ def read_pour(pour_id: int, s: Session = Depends(get_session)):
 
 
 @router.patch("/{pour_id}", response_model=PourOut)
-def update_pour(pour_id: int, body: PourPatch, s: Session = Depends(get_session)):
-    """회차 수정. 보낸 항목만 바꾼다 (예: 타설 시각 확정, 설계강도)."""
+def update_pour(pour_id: int, body: PourPatch, request: Request, s: Session = Depends(get_session)):
+    """회차 수정. 보낸 항목만 바꾼다 (예: 타설 시각 확정, 설계강도). 바뀐 항목의 전→후 값을 변경 기록에 남긴다."""
     p = get_pour(s, pour_id)
+    before = pour_values(p)
     data = body.model_dump(exclude_unset=True)   # 보내지 않은 항목은 빼고
     if "sensors" in data:
         data["sensors"] = ",".join(x.upper() for x in data["sensors"] or [])
@@ -111,21 +140,27 @@ def update_pour(pour_id: int, body: PourPatch, s: Session = Depends(get_session)
     if err := criteria.check_override(p.member, bool(p.durable), p.removal_override, p.removal_override_reason):
         s.rollback()
         raise HTTPException(422, err)
+    after = pour_values(p)
     s.commit()
     maturity.clear_cache()
+    request.state.audit_detail = audit.detail_json({"changes": audit.changes(before, after, POUR_LABELS)})
     return to_out(get_pour(s, pour_id))
 
 
 @router.delete("/{pour_id}", status_code=204)
-def delete_pour(pour_id: int, s: Session = Depends(get_session)):
+def delete_pour(pour_id: int, request: Request, s: Session = Depends(get_session)):
     """회차와 그 공시체 결과를 지운다. 센서 데이터는 남는다."""
-    s.delete(get_pour(s, pour_id))
+    p = get_pour(s, pour_id)
+    gone = {"이름": p.name, "현장": p.site, "설계기준강도 (MPa)": p.design_strength,
+            "공시체 결과": f"{len(p.tests)}건", "제외 구간": f"{len(p.exclusions)}건"}
+    s.delete(p)
     s.commit()
     maturity.clear_cache()
+    request.state.audit_detail = audit.detail_json({"deleted": gone})
 
 
 @router.post("/{pour_id}/detect", response_model=PourOut)
-def run_detection(pour_id: int, date: datetime | None = None, s: Session = Depends(get_session)):
+def run_detection(pour_id: int, request: Request, date: datetime | None = None, s: Session = Depends(get_session)):
     """측압으로 타설 시작·종료 자동 추정. date: 타설일 (생략 시 기존 시작/추정값의 날짜)."""
     p = get_pour(s, pour_id)
     day = date or p.start
@@ -134,8 +169,12 @@ def run_detection(pour_id: int, date: datetime | None = None, s: Session = Depen
     start, end = detect_pour(engine, day, p.sensor_list)
     if start is None:
         raise HTTPException(422, "해당 날짜에서 타설로 볼 만한 측압 상승을 찾지 못했습니다.")
+    before = {"detected_start": p.detected_start, "detected_end": p.detected_end}
     p.detected_start, p.detected_end = start, end
     s.commit()
+    request.state.audit_detail = audit.detail_json({"changes": audit.changes(
+        before, {"detected_start": start, "detected_end": end},
+        {"detected_start": "자동 추정 타설 시작", "detected_end": "자동 추정 타설 종료"})})
     maturity.clear_cache()
     return to_out(p)
 
@@ -191,24 +230,29 @@ def add_test(pour_id: int, body: StrengthTestIn, s: Session = Depends(get_sessio
 
 
 @router.put("/{pour_id}/tests/{test_id}", response_model=StrengthTestOut)
-def update_test(pour_id: int, test_id: int, body: StrengthTestIn, s: Session = Depends(get_session)):
-    """공시체 결과 수정."""
+def update_test(pour_id: int, test_id: int, body: StrengthTestIn, request: Request, s: Session = Depends(get_session)):
+    """공시체 결과 수정. 바뀐 항목의 전→후 값을 변경 기록에 남긴다."""
     t = s.get(StrengthTest, test_id)
     if t is None or t.pour_id != pour_id:
         raise HTTPException(404, "공시체 결과를 찾을 수 없습니다.")
+    before = test_values(t)
     for k, v in body.model_dump().items():
         setattr(t, k, v)
+    after = test_values(t)
     s.commit()
     maturity.clear_cache()
+    request.state.audit_detail = audit.detail_json({"changes": audit.changes(before, after, TEST_LABELS)})
     return t
 
 
 @router.delete("/{pour_id}/tests/{test_id}", status_code=204)
-def delete_test(pour_id: int, test_id: int, s: Session = Depends(get_session)):
+def delete_test(pour_id: int, test_id: int, request: Request, s: Session = Depends(get_session)):
     """공시체 결과 삭제."""
     t = s.get(StrengthTest, test_id)
     if t is None or t.pour_id != pour_id:
         raise HTTPException(404, "공시체 결과를 찾을 수 없습니다.")
+    request.state.audit_detail = audit.detail_json(
+        {"deleted": {TEST_LABELS[k]: v for k, v in test_values(t).items() if v is not None}})
     s.delete(t)
     s.commit()
     maturity.clear_cache()
@@ -244,11 +288,39 @@ def add_exclusion(pour_id: int, body: ExclusionIn, s: Session = Depends(get_sess
 
 
 @router.delete("/{pour_id}/exclusions/{exclusion_id}", status_code=204)
-def delete_exclusion(pour_id: int, exclusion_id: int, s: Session = Depends(get_session)):
+def delete_exclusion(pour_id: int, exclusion_id: int, request: Request, s: Session = Depends(get_session)):
     """제외 취소."""
     e = s.get(ExcludedRange, exclusion_id)
     if e is None or e.pour_id != pour_id:
         raise HTTPException(404, "제외 구간을 찾을 수 없습니다.")
+    request.state.audit_detail = audit.detail_json({"deleted": {"제외 시작": e.start, "제외 종료": e.end, "사유": e.reason}})
     s.delete(e)
     s.commit()
     maturity.clear_cache()
+
+
+# ---------- 변경 기록 ----------
+class HistoryOut(BaseModel):
+    id: int
+    at: datetime
+    user: str | None          # 로그인 ID ('system' = 자동 발송)
+    user_name: str | None     # 지금 계정 이름 (삭제된 계정이면 없음)
+    action: str
+    target: str
+    detail: str | None        # JSON 문자열: {"changes": [...]} / {"deleted": {...}} / 보낸 내용
+
+
+@router.get("/{pour_id}/history", response_model=list[HistoryOut])
+def history(pour_id: int, limit: int = Query(200, ge=1, le=1000), s: Session = Depends(get_session),
+            _=Depends(require_role("editor"))):
+    """이 회차의 변경 기록 (성공한 것만, 최신순). 회차 수정·공시체·제외 구간·타설 시각 추정·알림 발송.
+    회차 등록 기록은 주소에 회차 번호가 없어 여기에는 나오지 않는다 (관리자 변경 기록 화면에서 확인)."""
+    base = f"/api/pours/{pour_id}"
+    rows = list(s.scalars(select(AuditLog)
+                          .where(or_(AuditLog.path == base, AuditLog.path.like(f"{base}/%")),
+                                 AuditLog.status >= 200, AuditLog.status < 400)
+                          .order_by(AuditLog.id.desc()).limit(limit)))
+    names = dict(s.execute(select(AppUser.login_id, AppUser.name)
+                           .where(AppUser.login_id.in_({r.login_id for r in rows if r.login_id}))).all())
+    return [HistoryOut(id=r.id, at=r.at, user=r.login_id, user_name=names.get(r.login_id), action=r.action,
+                       target=r.path, detail=r.detail) for r in rows]

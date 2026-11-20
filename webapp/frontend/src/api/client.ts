@@ -164,6 +164,16 @@ export type UploadLog = Omit<UploadResult, "sensors"> & { id: number; created_at
 /** CSV 데이터 삭제 결과. ⚠ 백엔드 미구현 (요청 중) */
 export interface UploadDeleteResult { rows_deleted: number; sensors: string[]; period_start: string | null; period_end: string | null }
 
+/** 변경 기록 한 줄 (백엔드 audit.py). detail 은 JSON 문자열:
+ *  {"changes":[{field,label,before,after}]} (수정 전→후) / {"deleted":{항목:값}} / 보낸 내용 그대로 */
+export interface HistoryEntry {
+  id: number; at: string; user: string | null; user_name: string | null;
+  action: string; target: string; detail: string | null;
+}
+/** 관리자 변경 기록 (GET /api/audit): 실패한 시도와 IP 까지 */
+export interface AuditEntry extends HistoryEntry { ip: string | null; method: string; status: number; ok: boolean }
+export interface AuditQuery { user?: string; action?: string; target?: string; since?: string; until?: string; limit?: number }
+
 export interface ChatMessage { role: "user" | "assistant"; content: string }
 export interface AgentStep { tool: string; args: Record<string, unknown>; ok: boolean }
 export interface AgentReply { answer: string; steps: AgentStep[]; elapsed_ms: number }
@@ -213,6 +223,13 @@ export const api = {
   pour: (id: number) => request<Pour>(`/api/pours/${id}`),
   createPour: (body: Partial<Pour>) => request<Pour>("/api/pours", json("POST", body)),
   updatePour: (id: number, body: Partial<Pour>) => request<Pour>(`/api/pours/${id}`, json("PATCH", body)),
+  /** 이 회차의 변경 기록 (편집 권한 이상) */
+  pourHistory: (id: number) => request<HistoryEntry[]>(`/api/pours/${id}/history`),
+  /** 전체 변경 기록 (관리자 전용) */
+  audit: (q: AuditQuery = {}) => {
+    const qs = new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]));
+    return request<AuditEntry[]>(`/api/audit${qs.toString() ? `?${qs}` : ""}`);
+  },
   deletePour: (id: number) => request<void>(`/api/pours/${id}`, { method: "DELETE" }),
   detect: (id: number, date?: string) =>
     request<Pour>(`/api/pours/${id}/detect${date ? `?date=${encodeURIComponent(date)}` : ""}`, { method: "POST" }),

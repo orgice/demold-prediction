@@ -468,6 +468,12 @@ tbody tr:hover { background: var(--hover); }
 .user-table .uc-name { white-space: nowrap; min-width: 140px; width: 100%; }
 .user-table .uc-id, .user-table .uc-role, .user-table .uc-state, .user-table .uc-date, .user-table .uc-actions { width: 1%; white-space: nowrap; }
 .user-actions { justify-content: flex-end; gap: 6px; }
+
+/* 변경 기록 (components/ChangeHistory.tsx · pages/AdminAudit.tsx): 내용 칸만 여러 줄 */
+.history-table td { vertical-align: top; padding-top: 10px; padding-bottom: 10px; height: auto; }
+.change-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.change-before { color: var(--text-2); text-decoration: line-through; }
+.change-raw { overflow-wrap: anywhere; }
 .row-inactive td { color: var(--text-3); }
 .row-inactive td b { color: var(--text-2); }
 

@@ -5,7 +5,9 @@ AuditMiddleware 가 /api/ 아래의 '바꾸는 요청'(POST·PUT·PATCH·DELETE)
     - 무엇을: ACTIONS 표의 작업 이름 + 주소(대상 id 포함) + 보낸 내용(JSON, 비밀번호는 가림)
     - 결과: 응답 코드 (거부된 시도도 남는다)
 로그인 성공·실패도 남긴다. AI 상담(질문)과 조회는 데이터를 바꾸지 않으므로 남기지 않는다.
-바뀌기 전 값은 남기지 않는다 (필요하면 같은 대상의 이전 기록을 보면 된다).
+회차·공시체 수정과 삭제는 API 가 바뀌기 전→후 값을 request.state.audit_detail 에 남긴다 (changes() 참고).
+  {"changes": [{"field": "design_strength", "label": "설계기준강도 (MPa)", "before": 24, "after": 27}]}
+  {"deleted": {"이름": "3회차", ...}}
 """
 import ipaddress
 import json
@@ -83,6 +85,18 @@ def mask(body: bytes, content_type: str) -> str | None:
     if isinstance(data, dict):
         data = {k: ("***" if k in SECRET_KEYS else v) for k, v in data.items()}
     s = json.dumps(data, ensure_ascii=False)
+    return s if len(s) <= MAX_DETAIL else s[:MAX_DETAIL] + "…"
+
+
+def changes(before: dict, after: dict, labels: dict[str, str]) -> list[dict]:
+    """바뀐 항목만 [{field, label, before, after}] 로. 값이 같으면 빠진다 (datetime 은 문자열로)."""
+    norm = lambda v: v.isoformat() if hasattr(v, "isoformat") else v
+    return [{"field": k, "label": labels.get(k, k), "before": norm(before.get(k)), "after": norm(after.get(k))}
+            for k in after if norm(before.get(k)) != norm(after.get(k))]
+
+
+def detail_json(data: dict) -> str:
+    s = json.dumps(data, ensure_ascii=False, default=str)
     return s if len(s) <= MAX_DETAIL else s[:MAX_DETAIL] + "…"
 
 

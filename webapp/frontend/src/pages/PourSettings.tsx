@@ -4,11 +4,13 @@
 //   ② 연결 센서 선택·변경 → 이 회차 예측에 쓸 센서
 //   ③ CSV 데이터: 후속 데이터 추가 (중복 행은 건너뜀) + 이 회차 기간과 겹치는 업로드의 이름 변경·삭제 (⚠ 이름 변경·삭제는 목업)
 //   ④ 측정 구간 제외: 센서 이상·탈형 작업으로 튄 구간을 예측 계산에서만 뺀다 (원본은 그대로)
-//   ⑤ 회차 삭제 (공시체 결과와 제외 구간은 함께 삭제, 센서 데이터는 남음)
+//   ⑤ 변경 기록: 누가 언제 무엇을 바꿨는지 (바꾸기 전 → 후). components/ChangeHistory.tsx
+//   ⑥ 회차 삭제 (공시체 결과와 제외 구간은 함께 삭제, 센서 데이터는 남음)
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, Member, MEMBER_LABEL, Pour, Structure, STRUCTURE_LABEL, UploadLog, UploadResult } from "../api/client";
 import { uploadName, uploadsApi, UPLOADS_IS_MOCK } from "../api/uploads";
+import { PourHistory } from "../components/ChangeHistory";
 import { ErrorBox, Info, Loading, Modal, useAsync } from "../components/common";
 import { previewCriterion } from "../components/criteria";
 import { addHours, fmtDateTime, fmtFull, fmtSensorSpan, fromInput } from "../format";
@@ -159,6 +161,7 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
 
       <CsvData pour={pour} onDone={() => { sensors.reload(); onSaved(); }} />
       <Exclusions pour={pour} onChanged={onSaved} />
+      <PourHistory pour={pour} />
 
       <div className="card row between">
         <div className="small muted">회차를 삭제해도 센서 원본 데이터는 남습니다.</div>
