@@ -45,6 +45,19 @@ SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "FormCast").strip()
 NOTIFY_INTERVAL_MIN = float(os.environ.get("NOTIFY_INTERVAL_MIN", "10") or 10)   # 몇 분마다 알림을 확인할지
 APP_URL = os.environ.get("APP_URL", "").strip() or "http://localhost:8080"   # 메일의 '자세히 보기' 링크 주소
 
+# ---- 센서 데이터 자동 수집 (delta_sync.py, Databricks Delta Sharing) ----
+# 협력사가 보낸 자격증명 파일(config.share) 위치. 파일이 없거나 비어 있으면 자동 수집은 꺼진다
+# Docker 에서는 webapp/.env 의 DELTA_SHARE_FILE(내 컴퓨터 경로)을 이 위치로 읽기 전용 연결한다 (docker-compose.yml)
+DELTA_SHARE_FILE = os.environ.get("DELTA_SHARE_FILE_IN_CONTAINER", "/secrets/delta.share")
+# 수집할 공유 표 '공유.스키마.표=종류' (쉼표 구분). 종류: pressure(측압) / moisture(수분)
+DELTA_TABLES = dict(x.strip().split("=", 1) for x in os.environ.get(
+    "DELTA_TABLES",
+    "formis_prod_sensor_share.bronze.lat_press_sens_data_base=pressure,"
+    "formis_prod_sensor_share.bronze.moist_sens_data_base=moisture").split(",") if "=" in x)
+DELTA_SYNC_INTERVAL_MIN = float(os.environ.get("DELTA_SYNC_INTERVAL_MIN", "10") or 10)   # 몇 분마다 수집할지
+DELTA_UTC_OFFSET_H = 9        # 공유 표의 시각은 UTC → 현장 현지 시각(KST)으로 바꿀 때 더하는 시간
+DELTA_LOOKBACK_H = 48         # 늦게 도착한 행을 받으려고 센서별 마지막 시각보다 이만큼 앞부터 다시 본다
+
 # ---- 데이터 정제 기준 (센서 오류값 걸러내기) ----
 PRESSURE_OUTLIER_KG = 60      # 이 값을 넘는 측압은 센서 오류 (협력사 기준)
 TEMP_MISSING = -100           # 이 값 이하 온도는 센서 미연결 (-127)

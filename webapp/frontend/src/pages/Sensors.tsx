@@ -5,7 +5,8 @@
 //   ③-1 칩 오른쪽 ⋮ 아이콘 (편집 권한): 이름 변경·숨기기·삭제. 숨긴 센서는 칩 끝 '숨긴 센서 N개'로 펼쳐 다시 보이게 함
 //        (⚠ 백엔드 미연동 목업, components/SensorChipMenu.tsx)
 //   ④ 지표별 그래프 (데이터가 없는 지표는 생략, 결측 구간은 선이 끊김)
-//   아래: 센서 데이터 불러오기 (CSV 업로드 · 새 타설 등록)
+//   아래: 센서 데이터 자동 수집 상태 (Delta Sharing, components/DeltaStatus.tsx)
+//         센서 데이터 불러오기 (CSV 업로드 · 새 타설 등록)
 // 주소에 ?pour=3 을 붙이면 3번 회차로 바로 연다 (회차 설정의 '원본 보기').
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -14,6 +15,7 @@ import { sensorName, sensorsApi } from "../api/sensors";
 import { DeleteSensorModal, SensorChipMenu } from "../components/SensorChipMenu";
 import { Chart, sensorColor } from "../components/Chart";
 import { ErrorBox, Info, Loading, useAsync } from "../components/common";
+import DeltaStatus from "../components/DeltaStatus";
 import UploadPanel from "../components/UploadPanel";
 import { useCanEdit } from "../auth/AuthContext";
 import { addHours, fmtDateTime, fmtSensorSpan, hoursBetween } from "../format";
@@ -205,6 +207,7 @@ export default function Sensors() {
         );
       })}
 
+      <DeltaStatus onSynced={() => { sensors.reload(); pours.reload(); }} />
       {canEdit && <UploadPanel onUploaded={() => { sensors.reload(); pours.reload(); }} />}
     </main>
   );
