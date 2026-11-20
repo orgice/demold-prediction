@@ -22,3 +22,6 @@ outputs/
 webapp/backend/seed/*.csv
 !webapp/backend/seed/*.example.csv
 webapp/backend/app/data/guideline_chunks.json
+
+# Delta Sharing 자격증명 (토큰 포함, 절대 커밋 금지)
+*.share

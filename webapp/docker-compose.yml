@@ -46,6 +46,7 @@ services:
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-FormCast}
       NOTIFY_INTERVAL_MIN: ${NOTIFY_INTERVAL_MIN:-10}
       APP_URL: ${APP_URL:-}
+      DELTA_SYNC_INTERVAL_MIN: ${DELTA_SYNC_INTERVAL_MIN:-10}   # 센서 데이터 자동 수집 주기 (분)
       COOKIE_SECURE: ${COOKIE_SECURE:-false}   # HTTPS(caddy)로 들어온 요청은 이 값과 관계없이 HTTPS 전용 쿠키
     depends_on:
       db: {condition: service_healthy}
@@ -53,6 +54,8 @@ services:
     volumes:
       # 초기 적재용 센서 CSV 폴더 (읽기 전용). 데이터는 저장소에 포함되지 않음 → webapp/.env 의 SEED_SENSOR_DIR
       - ${SEED_SENSOR_DIR:-../private_data/sensors}:/seed/sensors:ro
+      # 센서 데이터 자동 수집용 Delta Sharing 자격증명 (읽기 전용). 비우면 빈 파일이 연결돼 수집이 꺼진다
+      - ${DELTA_SHARE_FILE:-/dev/null}:/secrets/delta.share:ro
 
   # 웹 화면 (React + nginx, :8080). /api 요청은 backend로 넘긴다 (frontend/nginx.conf)
   frontend:

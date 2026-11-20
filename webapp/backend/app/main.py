@@ -27,8 +27,8 @@ from .test_users import ensure_test_users
 from .config import CORS_ORIGINS
 from .db import Base, engine
 from .ingest import link_legacy_rows
-from . import notify
-from .routers import agent, audit, auth, model, notify as notify_router, pours, sensors, users
+from . import delta_sync, notify
+from .routers import agent, audit, auth, delta, model, notify as notify_router, pours, sensors, users
 
 app = FastAPI(title="거푸집 탈형 시점 예측 API", version="0.1.0")
 # CORS: 다른 주소의 웹 화면이 로그인 쿠키를 들고 이 API를 부를 수 있게 허용할 주소 (config.CORS_ORIGINS)
@@ -45,6 +45,7 @@ app.include_router(auth.router)
 app.include_router(users.router)                     # 관리자 검사는 routers/users.py 안에서
 app.include_router(audit.router)                     # 관리자 전용
 app.include_router(notify_router.router)             # 알림 자동 발송 상태·시험 발송 (권한 검사는 안에서)
+app.include_router(delta.router)                     # 센서 데이터 자동 수집 상태·지금 수집 (권한 검사는 안에서)
 
 
 @app.on_event("startup")
@@ -70,6 +71,7 @@ def create_tables():
     ensure_first_admin()
     ensure_test_users()
     notify.start()   # SMTP 설정이 있으면 알림 메일 자동 발송 시작
+    delta_sync.start()   # Delta Sharing 자격증명 파일이 있으면 센서 데이터 자동 수집 시작
 
 
 @app.get("/api/health")

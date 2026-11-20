@@ -164,6 +164,13 @@ export type UploadLog = Omit<UploadResult, "sensors"> & { id: number; created_at
 /** CSV 데이터 삭제 결과. ⚠ 백엔드 미구현 (요청 중) */
 export interface UploadDeleteResult { rows_deleted: number; sensors: string[]; period_start: string | null; period_end: string | null }
 
+/** 센서 데이터 자동 수집 상태 (GET /api/delta/status). 시각은 KST, token_expires 는 UTC(ISO) */
+export interface DeltaStatus {
+  enabled: boolean; interval_min: number; tables: string[]; running: boolean;
+  last_run: string | null; last_ok: string | null; last_error: string | null;
+  last_inserted: Record<string, number>; token_expires: string | null;
+}
+
 /** 변경 기록 한 줄 (백엔드 audit.py). detail 은 JSON 문자열:
  *  {"changes":[{field,label,before,after}]} (수정 전→후) / {"deleted":{항목:값}} / 보낸 내용 그대로 */
 export interface HistoryEntry {
@@ -249,6 +256,9 @@ export const api = {
     request<Pour>(`/api/pours/${id}/notice`, json("POST", body)),
   // 알림 메일 자동 발송 상태 (routers/notify.py)
   notifyStatus: () => request<NotifyStatus>("/api/notify/status"),
+  // 센서 데이터 자동 수집 (routers/delta.py). 지금 수집은 관리자만
+  deltaStatus: () => request<DeltaStatus>("/api/delta/status"),
+  runDelta: () => request<DeltaStatus & { result: Record<string, number> }>("/api/delta/run", { method: "POST" }),
   // 제외 구간
   exclusions: (id: number) => request<Exclusion[]>(`/api/pours/${id}/exclusions`),
   addExclusion: (id: number, body: ExclusionIn) =>
