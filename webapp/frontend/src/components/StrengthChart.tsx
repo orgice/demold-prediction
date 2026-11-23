@@ -4,7 +4,7 @@
 //   TempChart / CompareTempChart  콘크리트 내부온도
 import type { Milestone, Prediction } from "../api/client";
 import { fmtAge, fmtDateTime, hoursBetween } from "../format";
-import { Chart, useChartTheme } from "./Chart";
+import { Chart, NARROW_LEGEND, NARROW_SIDE, NARROW_Y_AXIS, useChartTheme, useNarrow } from "./Chart";
 import { LineColors, useLineColors } from "./chartColors";
 
 // 그래프 의미별 색은 내 계정 › 그래프 색 설정에서 고른다 → chartColors.ts
@@ -80,13 +80,16 @@ export function StrengthChart({ pred, height = 380, compact = false, yMax }: {
 }) {
   const th = useChartTheme();
   const LINE = useLineColors();
+  const narrow = useNarrow() && !compact;
   const nowX = day(hoursBetween(pred.start, pred.as_of));
   const obs = pred.series.filter((s) => s.observed);
   // 수정 예측은 실측 끝점에서 이어지게 마지막 실측점부터 그린다
   const fut = pred.series.filter((s, i, a) => !s.observed || (a[i + 1] && !a[i + 1].observed));
   const tests = testPoints(pred);
   const option = {
-    grid: compact ? { left: 36, right: 12, top: 28, bottom: 28 } : { left: 48, right: 64, top: 40, bottom: 76 },
+    // 휴대폰: 범례가 두 줄로 감기므로 위 여백을 늘리고, 좌우 여백은 줄여 그래프를 넓게
+    grid: compact ? { left: 36, right: 12, top: 28, bottom: 28 }
+      : narrow ? { ...NARROW_SIDE, top: 76, bottom: 72 } : { left: 48, right: 64, top: 40, bottom: 76 },
     tooltip: {
       trigger: "axis",
       formatter: (params: { seriesName: string; value: number[]; marker: string }[]) => {
@@ -103,9 +106,10 @@ export function StrengthChart({ pred, height = 380, compact = false, yMax }: {
         ].join("<br/>");
       },
     },
-    legend: { show: !compact, data: ["최초 예측", "실측 기반 추정", "수정 예측", "목표 강도", "공시체"], tooltip: legendTip },
-    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 28, min: 0, max: xMaxDay([pred]), interval: 7 },
-    yAxis: { type: "value", name: "MPa", min: 0, max: yMax },
+    legend: { show: !compact, data: ["최초 예측", "실측 기반 추정", "수정 예측", "목표 강도", "공시체"], tooltip: legendTip, ...(narrow ? NARROW_LEGEND : {}) },
+    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 28, min: 0, max: xMaxDay([pred]), interval: 7,
+      ...(narrow ? { axisLabel: { showMaxLabel: false, fontSize: 11 } } : {}) },   // 휴대폰: 끝값(30)이 28과 붙어 보여 숨김
+    yAxis: { type: "value", name: "MPa", min: 0, max: yMax, ...(narrow ? NARROW_Y_AXIS : {}) },
     dataZoom: compact ? [] : [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
     series: [
       { // 90% 범위 음영
@@ -123,13 +127,16 @@ export function StrengthChart({ pred, height = 380, compact = false, yMax }: {
         // 실측 구간 음영 + 현재 시점 세로선
         markArea: { silent: true, itemStyle: { color: LINE.observed, opacity: 0.04 }, data: [[{ xAxis: 0 }, { xAxis: nowX }]] },
         markLine: { symbol: "none", silent: true, lineStyle: { color: th.text, type: "dashed", width: 1 },
-          label: { formatter: compact ? `${fmtAge(hoursBetween(pred.start, pred.as_of))}` : nowLabel(pred.as_of) + ` ${fmtAge(hoursBetween(pred.start, pred.as_of))}`,
+          label: { formatter: compact || narrow ? `${fmtAge(hoursBetween(pred.start, pred.as_of))}` : nowLabel(pred.as_of) + ` ${fmtAge(hoursBetween(pred.start, pred.as_of))}`,
             position: "end", color: th.strong, fontSize: 11, align: nowX > 14 ? "right" : "left" },
           data: [{ xAxis: nowX }] } },
       { name: "수정 예측", type: "line", symbol: "none", data: fut.map((s) => [day(s.age_h), s.strength]),
         // 가정 온도 기반 예측은 점선 (DESIGN.md 7장: 관측 구간과 색 + 선 종류로 구분)
         lineStyle: { width: 2.5, type: [6, 4], color: LINE.forecast }, itemStyle: { color: LINE.forecast }, z: 2,
-        endLabel: compact ? undefined : { show: true, formatter: `${f1(pred.strength_28d)} MPa`, color: LINE.forecast, fontWeight: 700 } },
+        endLabel: compact ? undefined : { show: true, formatter: narrow ? `${f1(pred.strength_28d)}` : `${f1(pred.strength_28d)} MPa`,
+          color: LINE.forecast, fontWeight: 700, fontSize: narrow ? 11 : 12,
+          // 휴대폰: 오른쪽 여백을 비우려고 선 끝 아래쪽, 그래프 안에 둔다 (위쪽은 최초 예측선과 겹친다)
+          ...(narrow ? { align: "right", verticalAlign: "top", offset: [-2, 6] } : {}) } },
       ...(pred.baseline ? [{
         name: "최초 예측", type: "line", symbol: "none", z: 1,
         data: pred.baseline.series.map((b) => [day(b.age_h), b.strength]),
@@ -137,7 +144,7 @@ export function StrengthChart({ pred, height = 380, compact = false, yMax }: {
       }] : []),
       { name: "목표 강도", type: "line", data: [], itemStyle: { color: LINE.target5 }, lineStyle: { type: "dotted", color: LINE.target5 },
         markLine: { symbol: "none", silent: true, lineStyle: { type: "dotted", width: 1 },
-          label: { show: !compact, formatter: "{b}", position: "end", fontSize: 11 }, data: targetLines(pred.milestones, LINE) } },
+          label: { show: !compact, formatter: narrow ? "{c}" : "{b}", position: narrow ? "insideEndTop" : "end", fontSize: narrow ? 10 : 11 }, data: targetLines(pred.milestones, LINE) } },
       { name: "공시체", type: "scatter", symbolSize: compact ? 7 : 10, z: 4,
         data: tests.map((t) => [day(t.age_h), t.fc]),
         itemStyle: { color: th.strong, borderColor: th.surface, borderWidth: 2 } },
@@ -151,6 +158,7 @@ export interface CompareItem { pred: Prediction; name: string; color: string }
 /** 여러 회차를 같은 경과일 축에 (화면설계서 3쪽) */
 export function CompareStrengthChart({ items, height = 400 }: { items: CompareItem[]; height?: number }) {
   const th = useChartTheme();
+  const narrow = useNarrow();
   const LINE = useLineColors();
   const series = items.flatMap(({ pred, name, color }) => {
     const done = isComplete(pred);
@@ -169,7 +177,7 @@ export function CompareStrengthChart({ items, height = 400 }: { items: CompareIt
     ];
   });
   const option = {
-    grid: { left: 56, right: 24, top: 40, bottom: 76 },
+    grid: narrow ? { ...NARROW_SIDE, top: 72, bottom: 72 } : { left: 56, right: 24, top: 40, bottom: 76 },
     // 커서 위치의 회차별 강도 (같은 회차의 실측·예측 선은 한 줄로, 공시체는 커서 근처일 때만)
     tooltip: { trigger: "axis", formatter: (ps: { seriesName: string; seriesType: string; value: number[]; marker: string; axisValue: number }[]) => {
       if (!ps.length) return "";
@@ -182,13 +190,15 @@ export function CompareStrengthChart({ items, height = 400 }: { items: CompareIt
       }).map((p) => `${p.marker}${p.seriesName}${p.seriesType === "scatter" ? " 공시체" : ""} <b>${f1(p.value[1])} MPa</b>`);
       return [`<b>타설 후 ${fmtAge(x * 24)}</b>`, ...rows].join("<br/>");
     } },
-    legend: { data: items.map((i) => i.name) },
-    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 28, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7 },
-    yAxis: { type: "value", name: "MPa", min: 0 },
+    // 좁은 화면은 회차가 많아도 범례를 스크롤로 한 줄 유지 (여러 줄이면 그래프가 너무 낮아진다)
+    legend: { data: items.map((i) => i.name), ...(narrow ? { textStyle: { fontSize: 11 }, itemWidth: 16, itemGap: 8 } : {}) },
+    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 28, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7,
+      ...(narrow ? { axisLabel: { showMaxLabel: false, fontSize: 11 } } : {}) },
+    yAxis: { type: "value", name: "MPa", min: 0, ...(narrow ? NARROW_Y_AXIS : {}) },
     dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
     series: [...series,
       { name: "목표 강도", type: "line", data: [], markLine: { symbol: "none", silent: true,
-        lineStyle: { type: "dashed", width: 1 }, label: { formatter: "{b}", fontSize: 11, position: "start" },
+        lineStyle: { type: "dashed", width: 1 }, label: narrow ? { formatter: "{c}", fontSize: 10, position: "insideEndTop" } : { formatter: "{b}", fontSize: 11, position: "start" },
         data: targetLines(items.flatMap((i) => i.pred.milestones), LINE) } }],
   };
   return <Chart option={option} height={height} />;
@@ -197,12 +207,14 @@ export function CompareStrengthChart({ items, height = 400 }: { items: CompareIt
 /** 회차 하나의 내부온도: 실선 = 관측, 점선 = 가정 (직전 24시간 반복) */
 export function TempChart({ pred, height = 220, compact = false }: { pred: Prediction; height?: number; compact?: boolean }) {
   const LINE = useLineColors();
+  const narrow = useNarrow() && !compact;
   const option = {
-    grid: compact ? { left: 36, right: 12, top: 16, bottom: 24 } : undefined,
+    grid: compact ? { left: 36, right: 12, top: 16, bottom: 24 } : narrow ? { ...NARROW_SIDE, top: 44, bottom: 52 } : undefined,
     tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ℃`) },
     legend: { show: !compact, data: ["관측", "가정"], tooltip: legendTip },
-    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 28, min: 0, max: xMaxDay([pred]), interval: compact ? 14 : 7 },
-    yAxis: { type: "value", name: "℃", scale: true },
+    xAxis: { type: "value", name: compact ? "" : "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 28, min: 0, max: xMaxDay([pred]), interval: compact ? 14 : 7,
+      ...(narrow ? { axisLabel: { showMaxLabel: false, fontSize: 11 } } : {}) },
+    yAxis: { type: "value", name: "℃", scale: true, ...(narrow ? NARROW_Y_AXIS : {}) },
     series: [
       { name: "관측", type: "line", symbol: "none", lineStyle: { width: 1.5, color: LINE.tempObserved }, itemStyle: { color: LINE.tempObserved },
         data: pred.series.filter((s) => s.observed).map((s) => [day(s.age_h), s.temp]) },
@@ -215,12 +227,14 @@ export function TempChart({ pred, height = 220, compact = false }: { pred: Predi
 
 /** 여러 회차의 관측 내부온도 (예측 없음, 마지막 측정 시점까지만) */
 export function CompareTempChart({ items, height = 200 }: { items: CompareItem[]; height?: number }) {
+  const narrow = useNarrow();
   const option = {
-    grid: { left: 56, right: 24, top: 32, bottom: 40 },
+    grid: narrow ? { ...NARROW_SIDE, top: 44, bottom: 44 } : { left: 56, right: 24, top: 32, bottom: 40 },
     tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ℃`) },
     legend: { data: items.map((i) => i.name) },
-    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 24, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7 },
-    yAxis: { type: "value", name: "℃", scale: true },
+    xAxis: { type: "value", name: "타설 후 경과일", nameLocation: "middle", axisPointer: dayPointer, nameGap: 24, min: 0, max: xMaxDay(items.map((i) => i.pred)), interval: 7,
+      ...(narrow ? { axisLabel: { showMaxLabel: false, fontSize: 11 } } : {}) },
+    yAxis: { type: "value", name: "℃", scale: true, ...(narrow ? NARROW_Y_AXIS : {}) },
     series: items.map(({ pred, name, color }) => ({
       name, type: "line", symbol: "none", lineStyle: { width: 1.5, color }, itemStyle: { color },
       data: pred.series.filter((s) => s.observed).map((s) => [day(s.age_h), s.temp]),
