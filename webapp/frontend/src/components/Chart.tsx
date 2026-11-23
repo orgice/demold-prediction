@@ -31,12 +31,14 @@ export function useNarrow() {
 /** 좁은 화면 범례: 스크롤 대신 여러 줄로 감싸고 글자·표식을 줄인다 (그래프 위쪽 여백은 화면별로 늘린다) */
 export const NARROW_LEGEND = { type: "plain", itemWidth: 16, itemHeight: 8, itemGap: 8, textStyle: { fontSize: 11 } };
 
-/** 좁은 화면 y축: 숫자는 그래프 밖 왼쪽 좁은 띠에 두되 왼쪽 끝에 맞춘다 (선과 겹치지 않게).
- *  숫자 왼쪽 끝(4px)과 그래프 오른쪽 끝(4px)이 카드에서 같은 거리라 좌우 균형이 맞는다 */
-export const NARROW_SIDE = { left: 22, right: 4 };
+/** 좁은 화면 y축: 숫자를 그래프 안쪽 왼쪽 끝에 반투명 흰 배경으로 얹어 좌우 여백을 똑같이(4px) 비운다.
+ *  숫자는 눈금선 바로 아래에 붙여 맨 위 숫자도 그래프 테두리 밖으로 넘어가지 않게 하고,
+ *  맨 아래 숫자는 x축 아래로 넘어가므로 숨긴다. 축 이름(MPa·℃)은 그래프 왼쪽 끝에 맞춘다 */
+export const NARROW_SIDE = { left: 4, right: 4 };
 export const NARROW_Y_AXIS = {
-  nameGap: 10, nameTextStyle: { align: "left", padding: [0, 0, 0, -18] },
-  axisLabel: { inside: false, align: "left", margin: 18, fontSize: 10 },
+  nameGap: 8, nameTextStyle: { align: "left" },
+  axisLabel: { inside: true, margin: 4, fontSize: 11, verticalAlign: "top", showMinLabel: false,
+    backgroundColor: "rgba(255,255,255,.85)", padding: [2, 3], borderRadius: 2 },
 };
 
 /** 그래프 공통 색 (앱은 밝은 테마 하나만 쓴다) */
