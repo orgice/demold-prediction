@@ -225,11 +225,19 @@ function CsvData({ pour, onDone }: { pour: Pour; onDone: () => void }) {
         </div>
       )}
 
+      {res && res.some((r) => r.error) && (
+        <div className="alert warn" role="status">
+          <div>파일 {res.length}개 중 {res.filter((r) => r.error).length}개를 저장하지 못했습니다. 나머지는 저장했습니다.</div>
+          <ul className="small">{res.filter((r) => r.error).map((r) => <li key={r.filename}>{r.filename}: {r.error}</li>)}</ul>
+        </div>
+      )}
       {res && (
         <div className="table-wrap">
           <table>
             <thead><tr><th>방금 올린 파일 / 센서</th><th>데이터 기간</th><th className="num">새로 저장 / 전체</th></tr></thead>
-            <tbody>{res.map((r) => (
+            <tbody>{res.map((r) => r.error ? (
+              <tr key={r.filename}><td>{r.filename}</td><td className="text-bad">저장 실패</td><td className="num">—</td></tr>
+            ) : (
               <tr key={r.filename}>
                 <td>{r.filename} <span className="tiny">{r.sensors.join(", ")}</span></td>
                 <td>{fmtDateTime(r.period_start)} ~ {fmtDateTime(r.period_end)}</td>

@@ -130,18 +130,29 @@ def sensor_series(macs: list[str] = Query(...), start: datetime = Query(...), en
 
 @router.post("/upload", response_model=list[UploadOut])
 async def upload(files: list[UploadFile] = File(...)):
-    """CSV 여러 개를 받아 하나씩 저장한다 (실제 처리는 ingest.save_upload). 이미 들어간 행은 건너뛴다."""
-    results = []
-    for f in files:
-        if not f.filename.lower().endswith(".csv"):
-            raise HTTPException(400, f"{f.filename}: CSV 파일만 올릴 수 있습니다.")
-        try:
-            r = save_upload(engine, await f.read(), f.filename)
-        except IngestError as e:
-            raise HTTPException(422, f"{f.filename}: {e}")
-        results.append(UploadOut(filename=f.filename, **{k: v for k, v in r.items() if k != "upload_id"}))
-    # 새 데이터가 들어왔으니 예측 모델의 기억(캐시)을 지워 다시 계산하게 한다
-    maturity.clear_cache()
+    """CSV 여러 개를 받아 하나씩 저장한다 (실제 처리는 ingest.save_upload). 이미 들어간 행은 건너뛴다.
+
+    파일마다 따로 처리한다: 잘못된 파일은 결과의 error 에 사유를 담고 나머지 파일은 저장한다.
+    모든 파일이 실패하면(아무것도 저장 안 됨) 예전처럼 422 로 사유를 돌려준다.
+    """
+    results: list[UploadOut] = []
+    try:
+        for f in files:
+            if not f.filename.lower().endswith(".csv"):
+                results.append(UploadOut(filename=f.filename, error="CSV 파일만 올릴 수 있습니다."))
+                continue
+            try:
+                r = save_upload(engine, await f.read(), f.filename)
+            except IngestError as e:
+                results.append(UploadOut(filename=f.filename, error=str(e)))
+                continue
+            results.append(UploadOut(filename=f.filename, **{k: v for k, v in r.items() if k != "upload_id"}))
+    finally:
+        # 새 데이터가 들어왔으면(중간에 예상 못 한 오류가 나도) 예측 모델의 기억(캐시)을 지워 다시 계산하게 한다
+        if any(r.error is None for r in results):
+            maturity.clear_cache()
+    if results and all(r.error for r in results):
+        raise HTTPException(422, " / ".join(f"{r.filename}: {r.error}" for r in results))
     return results
 
 

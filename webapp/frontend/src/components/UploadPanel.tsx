@@ -19,11 +19,15 @@ export default function UploadPanel({ onUploaded }: { onUploaded?: () => void })
   const [pending, setPending] = useState<File[]>([]); // 팝업에 넘길 파일
   const [created, setCreated] = useState<Pour | null>(null);     // 방금 등록한 회차 (완료 알림용)
   const input = useRef<HTMLInputElement>(null);
+  const savedResults = (results ?? []).filter((r) => !r.error);   // 일부 파일만 실패했을 때 저장된 것만 센다
+  const failedResults = (results ?? []).filter((r) => r.error);
 
   /** 고른 파일 중 .csv만 목록에 더한다 */
   const add = (list: FileList | null) => {
     if (!list) return;
-    setFiles((f) => [...f, ...Array.from(list).filter((x) => x.name.toLowerCase().endsWith(".csv"))]);
+    // FileList는 input 값을 비우면 함께 비워지므로(onChange에서 바로 비움) 지금 배열로 복사해 둔다
+    const picked = Array.from(list).filter((x) => x.name.toLowerCase().endsWith(".csv"));
+    setFiles((f) => [...f, ...picked]);
   };
   /** '파일만 올리기': 회차 등록 없이 업로드만 */
   const submit = async () => {
@@ -61,7 +65,7 @@ export default function UploadPanel({ onUploaded }: { onUploaded?: () => void })
       {created && (
         <div className="alert success row between">
           <span>
-            {results ? `파일 ${results.length}개(${results.reduce((n, r) => n + r.rows_inserted, 0).toLocaleString()}행)를 저장하고 ` : ""}
+            {savedResults.length > 0 ? `파일 ${savedResults.length}개(${savedResults.reduce((n, r) => n + r.rows_inserted, 0).toLocaleString()}행)를 저장하고 ` : ""}
             타설 이력에 <b>{created.name}</b>을(를) 등록했습니다.
           </span>
           <Link to={`/pours/${created.id}`} className="btn sm">타설 상세에서 그래프 보기</Link>
@@ -93,12 +97,20 @@ export default function UploadPanel({ onUploaded }: { onUploaded?: () => void })
         </div>
       )}
       <ErrorBox error={err} />
+      {failedResults.length > 0 && (
+        <div className="alert warn" role="status">
+          <div>파일 {results!.length}개 중 {failedResults.length}개를 저장하지 못했습니다. 나머지는 저장했습니다.</div>
+          <ul className="small">{failedResults.map((r) => <li key={r.filename}>{r.filename}: {r.error}</li>)}</ul>
+        </div>
+      )}
       {results && (
         <div className="table-wrap">
           <h3 className="mb-2">업로드 결과</h3>
           <table>
             <thead><tr><th>파일</th><th>종류</th><th>새로 저장</th><th>전체 행</th><th>기간</th><th>센서</th></tr></thead>
-            <tbody>{results.map((r) => (
+            <tbody>{results.map((r) => r.error ? (
+              <tr key={r.filename}><td>{r.filename}</td><td className="text-bad">저장 실패</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+            ) : (
               <tr key={r.filename}><td>{r.filename}</td><td>{r.kind === "pressure" ? "측압" : "수분"}</td>
                 <td><b>{r.rows_inserted.toLocaleString()}</b></td><td>{r.rows_total.toLocaleString()}</td>
                 <td>{fmtFull(r.period_start)} ~ {fmtFull(r.period_end)}</td><td>{r.sensors.join(", ")}</td></tr>
