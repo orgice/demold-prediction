@@ -446,6 +446,11 @@ tbody tr:hover { background: var(--hover); }
   .tabs button { min-height: 44px; }
   .seg button { height: 40px; }
   .chip { min-height: 36px; }
+  /* 센서 칩: 이름 줄 아래에 '종류 · 기간 · 일수'를 한 줄로 (글자 중간에서 끊기지 않게) */
+  .chips .chip-item { display: flex; width: 100%; }
+  .chips .chip-item .chip { flex: 1; min-width: 0; height: auto; padding-top: 6px; padding-bottom: 6px; border-radius: 16px;
+    flex-wrap: wrap; text-align: left; word-break: keep-all; }
+  .chips .chip-item .chip .tiny { flex-basis: 100%; padding-left: 14px; line-height: 1.4; }
   .icon-btn, .tri { width: 44px; height: 44px; }
   .picker-item { min-height: 44px; }
 }

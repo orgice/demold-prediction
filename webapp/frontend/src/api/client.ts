@@ -237,7 +237,12 @@ async function errorMessage(res: Response): Promise<string> {
     const body = await res.json();
     if (typeof body.detail === "string") msg = friendly(body.detail);
     // 입력 검사 오류(422)는 [{type, msg, ctx}] 목록으로 온다 → 항목별 한국어 문구 (같은 문구는 한 번만)
-    else if (Array.isArray(body.detail)) msg = [...new Set(body.detail.map(validationText))].join(" / ");
+    else if (Array.isArray(body.detail)) {
+      // 주소(path)의 값이 틀린 경우(예: /pours/abc)는 입력 칸 안내가 아니라 잘못된 주소다
+      msg = body.detail.some((d: { loc?: unknown[] }) => d.loc?.[0] === "path")
+        ? "찾을 수 없는 주소입니다."
+        : [...new Set(body.detail.map(validationText))].join(" / ");
+    }
   } catch { /* 본문 없음 */ }
   return msg;
 }

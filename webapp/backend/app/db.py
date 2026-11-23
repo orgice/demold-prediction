@@ -11,7 +11,9 @@ from .config import DATABASE_URL
 
 # pool_pre_ping: 오래 쉬던 연결이 끊겼으면 자동으로 다시 연결
 # pool_recycle: 1시간(3600초)마다 연결을 새로 만들어 DB 쪽 타임아웃을 피함
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
+# pool_size·max_overflow: 요청 하나가 세션 연결을 잡은 채 예측 계산용 연결을 하나 더 쓰므로,
+#   기본값(5+10)이면 동시 요청이 15건쯤 넘을 때 서로 기다리다 30초 뒤 500 이 된다 (대시보드 여러 회차 + 여러 사용자)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600, pool_size=20, max_overflow=40)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 

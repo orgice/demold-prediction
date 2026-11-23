@@ -114,8 +114,10 @@ def sensor_series(macs: list[str] = Query(...), start: datetime = Query(...), en
     d = pd.read_sql(q, engine, params={"macs": [m.upper() for m in macs], "a": start, "b": end})
     freq = "10min"
     if end - start > timedelta(days=45):
-        # 점이 너무 많으면 화면이 느려지므로 1시간 평균으로 줄인다
         freq = "1h"
+    if freq == "1h" and not d.empty:   # 빈 결과는 bucket 이 시각 형식이 아니라 resample 이 실패한다
+        # 점이 너무 많으면 화면이 느려지므로 1시간 평균으로 줄인다
+        d["bucket"] = pd.to_datetime(d["bucket"])
         d = (d.set_index("bucket").groupby("mac")[METRICS].resample("1h").mean()
                .dropna(how="all").reset_index())
     out = {}

@@ -80,6 +80,8 @@ export function Chart({ option, height = 320 }: { option: Record<string, unknown
   // 점을 켠 선 이름 (같은 이름의 선은 함께: 비교 그래프의 한 회차 실측·예측 선). 다시 누르면 끈다
   const [pinned, setPinned] = useState<Set<string>>(new Set());
   const srcSeries = Array.isArray(option.series) ? (option.series as Series[]) : [];
+  // 사용자가 확대한 x축 구간 (값 기준). 전체 보기로 돌아오면 비운다
+  const zoomRef = useRef<{ startValue: number; endValue: number } | null>(null);
   const seriesRef = useRef(srcSeries);
   seriesRef.current = srcSeries;
   const axis = {
@@ -118,6 +120,7 @@ export function Chart({ option, height = 320 }: { option: Record<string, unknown
       handleStyle: { color: "#FFFFFF", borderColor: "#C9D0D9" },
       moveHandleStyle: { color: "#C9D0D9" },
       ...zoom,
+      ...zoomRef.current,   // 데이터가 새로 와서 다시 그려도 사용자가 맞춰 둔 확대 구간을 유지
     })) : option.dataZoom,
     xAxis: merge(option.xAxis),
     yAxis: withPointerLabel(merge(option.yAxis), (v) => v.toFixed(1)),
@@ -131,6 +134,13 @@ export function Chart({ option, height = 320 }: { option: Record<string, unknown
   });
   // 선 근처(12px)를 누르면 가장 가까운 선의 점을 켜고 끈다. 얇은 선을 정확히 누르지 않아도 되게 화면 좌표로 찾는다
   const onChartReady = useCallback((chart: ECharts) => {
+    chart.on("datazoom", () => {
+      const z = (chart.getOption().dataZoom as { start?: number; end?: number; startValue?: number; endValue?: number }[] | undefined)?.[0];
+      if (!z) return;
+      const full = (z.start ?? 0) <= 0 && (z.end ?? 100) >= 100;
+      zoomRef.current = !full && typeof z.startValue === "number" && typeof z.endValue === "number"
+        ? { startValue: z.startValue, endValue: z.endValue } : null;
+    });
     chart.getZr().on("click", (e: { offsetX: number; offsetY: number }) => {
       let best: { name: string; d: number } | null = null;
       seriesRef.current.forEach((x, i) => {

@@ -70,6 +70,7 @@ export default function Dashboard() {
   const sorted = useMemo(() => [...(list ?? [])].filter((p) => startOf(p))
     .sort((a, b) => (startOf(b)! > startOf(a)! ? 1 : -1)), [list]);
   const active = sorted.filter(isActive);
+  const unstarted = (list ?? []).filter((p) => !startOf(p)).length;   // 시작 시각이 없어 예측·표시할 수 없는 회차
 
   // 기준 회차: 고른 것 > 가장 최근 진행 회차 > (진행 회차가 없으면) 가장 최근 회차
   const mainIds: number[] = mainSel === "all" ? active.map((p) => p.id)
@@ -106,10 +107,22 @@ export default function Dashboard() {
     setReloadTick((t) => t + 1);
   };
 
+  // 자동 갱신: 화면을 비우지 않고(그래프 확대·펼침 유지) 새 값이 오면 바꿔 끼운다. 실패하면 이전 값을 그대로 둔다
+  const refresh = () => {
+    api.pours().then(pours.setData).catch(() => undefined);
+    // 선택하지 않은 회차의 예측은 버려, 나중에 고르면 새로 불러오게 한다
+    setPreds((s) => Object.fromEntries(selectedIds.filter((id) => s[id]).map((id) => [id, s[id]])));
+    for (const id of selectedIds) {
+      api.prediction(id).then((data) => setPreds((s) => ({ ...s, [id]: { data } }))).catch(() => undefined);
+    }
+  };
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
   // 실시간 수집 데이터 반영: 10분마다 회차·예측을 다시 불러온다 (탭이 보일 때만, 예시 모드 제외)
   useEffect(() => {
     if (demo) return;
-    const t = setInterval(() => { if (document.visibilityState === "visible") retry(); }, REFRESH_MS);
+    const t = setInterval(() => { if (document.visibilityState === "visible") refreshRef.current(); }, REFRESH_MS);
     return () => clearInterval(t);
   }, [demo]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -154,10 +167,18 @@ export default function Dashboard() {
       )}
       {!demo && <LiveCandidates onRegistered={(p) => { pours.reload(); setMainSel(p.id); }} />}
 
+      {unstarted > 0 && sorted.length > 0 && (
+        <div className="alert info alert-inline small">
+          <span>타설 시작 시각이 없는 회차 {unstarted}건은 대시보드에 나오지 않습니다. 타설 이력에서 시각을 확인해 주세요.</span>
+          <Link to="/pours" className="btn sm">타설 이력</Link>
+        </div>
+      )}
       {sorted.length === 0 ? (
         <div className="card empty">
-          <h2>등록된 타설 회차가 없습니다</h2>
-          <div className="muted small">{canEdit
+          <h2>{unstarted > 0 ? "표시할 타설 회차가 없습니다" : "등록된 타설 회차가 없습니다"}</h2>
+          <div className="muted small">{unstarted > 0
+            ? `등록된 회차 ${unstarted}건에 타설 시작 시각이 없어 예측할 수 없습니다. 타설 이력에서 시각을 입력하거나 자동 추정을 실행해 주세요.`
+            : canEdit
             ? "새 타설을 등록하면 강도 예측과 기준 강도 도달 시점이 여기에 표시됩니다."
             : "타설이 등록되면 강도 예측과 기준 강도 도달 시점이 여기에 표시됩니다."}</div>
           <div className="actions center">
@@ -483,7 +504,7 @@ function Overlay({ items, colorOf, demo, kpi }: { items: Item[]; colorOf: (id: n
   // 회차 하나: 상세와 같은 요약 + 그래프
   if (items.length === 1) {
     const it = items[0];
-    return <BigCard item={it} demo={demo} open={!!open[it.pour.id]} onToggle={() => toggle(it.pour.id)} kpi={kpi} />;
+    return <BigCard key={it.pour.id} item={it} demo={demo} open={!!open[it.pour.id]} onToggle={() => toggle(it.pour.id)} kpi={kpi} />;
   }
 
   // 여러 회차: 같은 경과일 축
@@ -535,7 +556,7 @@ function Separate({ items, colorOf, demo, kpi }: { items: Item[]; colorOf: (id: 
   const half = cols === 2;
   return (
     <div className="stack loose">
-      {top && <BigCard item={top} color={items.length > 1 ? colorOf(top.pour.id) : undefined} demo={demo}
+      {top && <BigCard key={top.pour.id} item={top} color={items.length > 1 ? colorOf(top.pour.id) : undefined} demo={demo}
         open={!!open[top.pour.id]} onToggle={() => toggle(top.pour.id)} yMax={items.length > 1 ? yMax : undefined} kpi={kpi} />}
       {rest.length > 0 && (
         <div className={`grid sep-grid sep-${cols}`}>
