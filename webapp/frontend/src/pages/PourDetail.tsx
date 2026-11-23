@@ -11,7 +11,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, MEMBER_LABEL, Pour, Prediction, StrengthTest, StrengthTestIn } from "../api/client";
 import { useCanEdit } from "../auth/AuthContext";
 import { Chart, sensorColor, useChartTheme } from "../components/Chart";
-import { ErrorBox, Info, Loading, memberMilestones, MilestoneRow, targetState, useAsync } from "../components/common";
+import { ErrorBox, Info, Loading, memberMilestones, MilestoneRow, NO_START_VIEWER_MSG, targetState, useAsync } from "../components/common";
 import { StrengthChart, TempChart, testPoints } from "../components/StrengthChart";
 import { fmtAge, fmtDateTime, fmtFull, fromInput, toInput } from "../format";
 import SettingsTab from "./PourSettings";
@@ -34,7 +34,12 @@ export default function PourDetail() {
   // 다른 탭에서 저장하면: 회차 정보를 다시 불러오고, 강도 예측도 새로 계산하게 한다
   const changed = () => { pour.reload(); setVersion((v) => v + 1); };
 
-  if (pour.error) return <main className="page"><ErrorBox error={pour.error} /></main>;
+  if (pour.error) return (
+    <main className="page">
+      <ErrorBox error={pour.error} onRetry={pour.reload} />
+      <div className="actions start mt-2"><Link to="/pours" className="btn">타설 이력</Link></div>
+    </main>
+  );
   if (!pour.data) return <main className="page"><Loading /></main>;
   const p = pour.data;
   return (
@@ -44,7 +49,9 @@ export default function PourDetail() {
           <h1>{p.name}{p.member && <span className="badge neutral badge-gap">{MEMBER_LABEL[p.member]}</span>}</h1>
           <div className="muted small">
             {p.site ? `${p.site} · ` : ""}타설 시작 {fmtFull(p.pour_start ?? p.detected_start)}{" "}
-            {p.pour_start ? <span className="badge neutral">확정</span> : <span className="badge warn">자동 추정 — 확인 필요</span>}
+            {p.pour_start ? <span className="badge neutral">확정</span>
+              : p.detected_start ? <span className="badge warn">자동 추정 — 확인 필요</span>
+              : <span className="badge warn">타설 시각 미입력</span>}
             {" "}· 센서 {p.sensors.join(", ")}
           </div>
         </div>
@@ -68,7 +75,11 @@ export default function PourDetail() {
 /** 강도 예측 탭: 목표 도달 요약 → KPI(현재·28일) → 예측 곡선과 해체 시각 → 내부온도 → 모델 정보 (DESIGN.md 12.2) */
 function PredictionTab({ pour, version, onTab }: { pour: Pour; version: number; onTab: (t: Tab) => void }) {
   const latest = useAsync(() => api.prediction(pour.id), [pour.id, version]);
-  if (latest.error) return <ErrorBox error={latest.error} />;
+  const canEdit = useCanEdit();
+  // 타설 시각이 없으면 서버 안내('설정에서 입력…')는 편집 계정용이라, 보기 계정에는 담당자 요청 안내로
+  if (latest.error && !canEdit && !pour.pour_start && !pour.detected_start)
+    return <div className="alert warn">{NO_START_VIEWER_MSG}</div>;
+  if (latest.error) return <ErrorBox error={latest.error} onRetry={latest.reload} />;
   const pred = latest.data;
   if (!pred) return <Loading text="예측 계산 중…" />;
 
@@ -250,7 +261,7 @@ function PourTimeTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
         </div>
         <div className="tiny mb-2">드래그·휠로 확대해 시작과 종료를 확인하세요.</div>
         {day.loading && <Loading />}
-        <ErrorBox error={day.error} />
+        <ErrorBox error={day.error} onRetry={day.reload} />
         {option && Object.keys(day.data!.series).length > 0 ? <Chart option={option} height={400} />
           : !day.loading && <div className="alert info">이 날짜의 측압 데이터가 없습니다.</div>}
       </div>

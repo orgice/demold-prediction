@@ -9,7 +9,7 @@
 //   같은 기준은 한 번만 알린다 (해체 기준 값을 바꾸면 새 기준으로 다시 알림).
 // 같은 알림(같은 key)은 메일 초안을 열거나 서버가 자동 발송하면 '보냄'으로 기록되어 종 아이콘 숫자에서 빠진다.
 import { MEMBER_LABEL, Milestone, Pour, Prediction } from "../api/client";
-import { fmtDateTime, hoursBetween } from "../format";
+import { fmtDateTime, hoursBetween, nowKst } from "../format";
 
 export const BEFORE_HOURS = 24;    // 해체 기준 도달 예상 시각보다 이만큼 먼저 알린다
 const STALE_HOURS = 24;            // 예상 시각이 이보다 더 지났으면 알리지 않는다 (오래된 회차)
@@ -30,7 +30,6 @@ export interface AlertItem {
 /** 알릴 기준 = 해체 기준 (설계기준강도 제외) */
 const targetsOf = (pred: Prediction): Milestone[] => pred.milestones.filter((m) => m.key !== "design");
 
-const nowLocal = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
 
 /** 기준별 도달 예상 시각 {"slab": "2026-07-05T08:50:00", ...} (보냄 기록에 함께 저장) */
 export function milestoneSnapshot(pred: Prediction): Record<string, string | null> {
@@ -39,7 +38,7 @@ export function milestoneSnapshot(pred: Prediction): Record<string, string | nul
 
 /** 회차 하나의 알림 목록 */
 export function alertsFor(pour: Pour, pred: Prediction): AlertItem[] {
-  const now = nowLocal();
+  const now = nowKst();
   const out: Omit<AlertItem, "sentAt" | "auto">[] = [];
   for (const m of targetsOf(pred)) {
     if (m.reached_at_as_of || !m.expected) continue;

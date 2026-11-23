@@ -3,7 +3,7 @@
 //   CompareStrengthChart 여러 회차를 같은 축에: 회차별 고유 색, 실측은 진한 실선, 예측은 옅은 점선
 //   TempChart / CompareTempChart  콘크리트 내부온도
 import type { Milestone, Prediction } from "../api/client";
-import { fmtAge, fmtDateTime, hoursBetween } from "../format";
+import { fmtAge, fmtDateTime, hoursBetween, nowKst } from "../format";
 import { Chart, NARROW_LEGEND, NARROW_SIDE, NARROW_Y_AXIS, useChartTheme, useNarrow } from "./Chart";
 import { LineColors, useLineColors } from "./chartColors";
 
@@ -40,7 +40,7 @@ export function testPoints(pred: Prediction, used?: boolean) {
 
 /** 마지막 데이터가 1시간 이내면 "현재", 아니면 마지막 데이터 시각 */
 export function nowLabel(asOf: string) {
-  return Date.now() - new Date(asOf).getTime() <= 3600_000 ? "현재" : `마지막 데이터 ${fmtDateTime(asOf)}`;
+  return hoursBetween(asOf, nowKst()) <= 1 ? "현재" : `마지막 데이터 ${fmtDateTime(asOf)}`;
 }
 
 /** 타설 후 28일까지 실측 온도가 다 있는 회차 = 측정 완료 */

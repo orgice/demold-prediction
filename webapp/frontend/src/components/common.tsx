@@ -24,9 +24,19 @@ export function useAsync<T>(fn: () => Promise<T>, deps: DependencyList) {
   return { data, error, loading, reload, setData };
 }
 
-/** 빨간 오류 상자 (오류가 없으면 아무것도 안 그림) */
-export function ErrorBox({ error }: { error: string | null }) {
-  return error ? <div className="alert error">{error}</div> : null;
+/** 타설 시각이 없는 회차를 보기 계정이 볼 때 안내 (서버 안내 '설정에서 입력…'은 편집 계정용) */
+export const NO_START_VIEWER_MSG = "타설 시작 시각이 아직 입력되지 않았습니다. 편집 권한이 있는 담당자에게 입력을 요청해 주세요.";
+
+/** 빨간 오류 상자 (오류가 없으면 아무것도 안 그림). onRetry 를 주면 오른쪽에 '다시 시도' 버튼 */
+export function ErrorBox({ error, onRetry }: { error: string | null; onRetry?: () => void }) {
+  if (!error) return null;
+  if (!onRetry) return <div className="alert error">{error}</div>;
+  return (
+    <div className="alert error alert-inline" role="alert">
+      <span>{error}</span>
+      <button className="btn sm" onClick={onRetry}>다시 시도</button>
+    </div>
+  );
 }
 
 /** "불러오는 중…" 같은 회색 안내 글자 */

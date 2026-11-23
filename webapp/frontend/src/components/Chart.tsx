@@ -36,6 +36,7 @@ export const NARROW_LEGEND = { type: "plain", itemWidth: 16, itemHeight: 8, item
  *  맨 아래 숫자는 x축 아래로 넘어가므로 숨긴다. 축 이름(MPa·℃)은 그래프 왼쪽 끝에 맞춘다 */
 export const NARROW_SIDE = { left: 4, right: 4 };
 export const NARROW_Y_AXIS = {
+  z: 3,   // 숫자(배경 포함)를 선·점 위에 그려 겹쳐도 읽히게 (계열 기본 z=2)
   nameGap: 8, nameTextStyle: { align: "left" },
   axisLabel: { inside: true, margin: 4, fontSize: 11, verticalAlign: "top", showMinLabel: false,
     backgroundColor: "rgba(255,255,255,.85)", padding: [2, 3], borderRadius: 2 },

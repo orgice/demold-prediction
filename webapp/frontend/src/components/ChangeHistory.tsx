@@ -92,7 +92,7 @@ export function PourHistory({ pour }: { pour: Pour }) {
         <h3>변경 기록<Info align="right">이 회차의 정보·공시체 결과·제외 구간·타설 시각을 누가 언제 바꿨는지 보여 줍니다. 수정은 바꾸기 전 → 후 값을 남깁니다. 편집·관리자 권한만 볼 수 있습니다.</Info></h3>
         {list.data && <span className="tiny">{rows.length}건</span>}
       </div>
-      <ErrorBox error={list.error} />
+      <ErrorBox error={list.error} onRetry={list.reload} />
       {list.loading && !list.data && <Loading />}
       {list.data && (rows.length === 0 ? <div className="tiny">아직 변경 기록이 없습니다.</div> : (
         <div className="table-wrap">
