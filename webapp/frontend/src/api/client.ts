@@ -155,6 +155,8 @@ export interface PourDay {
 export interface UploadResult {
   filename: string; kind: string; rows_total: number; rows_inserted: number;
   period_start: string | null; period_end: string | null; sensors: string[];
+  /** 여러 파일 중 이 파일만 저장하지 못했을 때 사유 (저장된 파일은 null) */
+  error?: string | null;
 }
 
 // 업로드 이력에는 sensors가 없다

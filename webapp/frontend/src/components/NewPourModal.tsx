@@ -8,7 +8,8 @@ import { fmtDateTime, fromInput } from "../format";
 import { ErrorBox, Info, Modal, useAsync } from "./common";
 
 /** 올릴 파일 하나 + 미리 읽은 내용(peek) 또는 읽기 오류 */
-interface FileItem { file: File; peek?: CsvPeek; error?: string }
+/** saved: 이전 시도에서 이미 저장된 파일 (목록·업로드에서는 빼고, 센서·날짜를 찾는 데는 계속 쓴다) */
+interface FileItem { file: File; peek?: CsvPeek; error?: string; saved?: boolean }
 
 /** 등록 결과: 만든 회차, 업로드 결과, 타설 시각을 못 정했는지 (그러면 '타설 시점 확인' 탭으로 보낸다) */
 export interface NewPourResult { pour: Pour; uploads: UploadResult[]; needsTime: boolean }
@@ -32,6 +33,8 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   const [unpicked, setUnpicked] = useState<string[]>([]); // 사용자가 직접 뺀 센서 (파일을 더해도 유지)
   const [touched, setTouched] = useState({ date: false });
   const [err, setErr] = useState<string | null>(null);
+  const [failed, setFailed] = useState<UploadResult[]>([]);   // 일부 파일 저장 실패 (등록을 멈춘 이유)
+  const [savedUploads, setSavedUploads] = useState<UploadResult[]>([]);   // 앞선 시도에서 이미 저장된 파일 결과
   const [busy, setBusy] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
@@ -51,6 +54,7 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   // 미리 읽은 파일들에서 센서 목록과 측압 시작 시각을 모은다
   const peeks = files.flatMap((f) => (f.peek ? [f.peek] : []));
   const reading = files.some((f) => !f.peek && !f.error);
+  const toUpload = files.filter((f) => !f.saved);   // 화면 목록과 업로드 대상 (이미 저장된 파일 제외)
   const fileSensors = new Map<string, { kind: CsvPeek["kind"]; last: string }>();
   peeks.forEach((p) => p.sensors.forEach((s) => {
     const prev = fileSensors.get(s.mac);
@@ -88,15 +92,24 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
         : `${refDay}에 데이터가 있는 센서가 없습니다. 그날의 CSV를 추가하세요.`);
     }
     if (!name.trim() || macs.length === 0) return setErr("이름과 센서를 선택하세요.");
-    setErr(null);
+    setErr(null); setFailed([]);
     let uploads: UploadResult[] = [];
     try {
-      if (files.length > 0) {
+      if (toUpload.length > 0) {
         setBusy("업로드·집계 중… (큰 파일은 몇 분)");
-        uploads = await api.upload(files.map((f) => f.file));
+        uploads = await api.upload(toUpload.map((f) => f.file));
       }
     } catch (e) {
       setErr(`업로드 실패: ${(e as Error).message}`);
+      return setBusy(null);
+    }
+    // 일부 파일만 실패: 실패한 파일의 센서는 데이터가 없으니 등록을 멈추고, 저장된 파일은 목록에서 뺀다
+    const bad = uploads.filter((u) => u.error);
+    if (bad.length > 0) {
+      const savedNames = new Set(uploads.filter((u) => !u.error).map((u) => u.filename));
+      setFiles((prev) => prev.map((x) => (!x.saved && savedNames.has(x.file.name) ? { ...x, saved: true } : x)));
+      setSavedUploads((prev) => [...prev, ...uploads.filter((u) => !u.error)]);
+      setFailed(bad);
       return setBusy(null);
     }
     try {
@@ -112,13 +125,14 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
         needsTime = !found?.detected_start;
         if (needsTime) alert("회차는 등록됐지만 타설 시작 시각을 찾지 못했습니다. 이어지는 '타설 시점 확인'에서 직접 입력하세요.");
       }
-      onDone({ pour, uploads, needsTime });
+      onDone({ pour, uploads: [...savedUploads, ...uploads], needsTime });
     } catch (e) {
       // 업로드가 끝난 뒤 실패하면 데이터는 이미 저장돼 있으니 파일을 비우고 다시 등록하게 한다
-      setErr(uploads.length > 0
+      const anySaved = uploads.length > 0 || savedUploads.length > 0;
+      setErr(anySaved
         ? `파일은 저장됐지만 타설 등록에 실패했습니다: ${(e as Error).message}`
         : String((e as Error).message));
-      if (uploads.length > 0) setFiles([]);
+      if (anySaved) setFiles([]);
       setBusy(null);
     }
   }
@@ -128,7 +142,7 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
       <div className="field">
         <span>데이터 파일<Info align="right">이미 저장된 데이터로만 등록하려면 파일을 모두 빼세요.</Info></span>
         <div className="file-list">
-          {files.map((f, i) => (
+          {toUpload.map((f, i) => (
             <div key={i} className="file-row">
               {f.peek && <span className="badge neutral">{f.peek.kind === "pressure" ? "측압" : "수분"}</span>}
               <div className="grow">
@@ -140,7 +154,7 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
                 </div>
               </div>
               <button className="btn sm" aria-label={`${f.file.name} 빼기`} disabled={!!busy}
-                onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}>✕</button>
+                onClick={() => setFiles((prev) => prev.filter((x) => x !== f))}>✕</button>
             </div>
           ))}
           <button className="file-add" disabled={!!busy}
@@ -194,10 +208,16 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
         {candidates.length > 0 && <span className="tiny">{macSource}을 미리 골랐습니다.</span>}
       </div>
       <ErrorBox error={err} />
+      {failed.length > 0 && (
+        <div className="alert error" role="alert">
+          <div>파일 {failed.length}개를 저장하지 못해 타설 등록을 멈추었습니다. 저장된 파일은 목록에서 뺐으니, 남은 파일을 고치거나 빼고 다시 등록해 주세요.</div>
+          <ul className="small">{failed.map((u) => <li key={u.filename}>{u.filename}: {u.error}</li>)}</ul>
+        </div>
+      )}
       <div className="actions">
         <button className="btn" onClick={onClose} disabled={!!busy}>취소</button>
         <button className="btn primary" disabled={!!busy || reading} onClick={submit}>
-          {busy ?? (reading ? "파일 읽는 중…" : files.length > 0 ? "업로드하고 등록" : "등록")}
+          {busy ?? (reading ? "파일 읽는 중…" : toUpload.length > 0 ? "업로드하고 등록" : "등록")}
         </button>
       </div>
     </Modal>

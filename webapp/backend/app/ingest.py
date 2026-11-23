@@ -69,9 +69,30 @@ def detect_kind(columns) -> str:
     raise IngestError("측압(press) 또는 수분(uf) 컬럼이 없는 CSV입니다.")
 
 
+def _read_raw(content: bytes) -> pd.DataFrame:
+    """CSV 바이트를 문자열 표로 읽는다. UTF-8(BOM 포함)로 안 읽히면 CP949(엑셀 한글 기본)로 다시 읽는다.
+    빈 파일·깨진 형식·읽을 수 없는 인코딩은 IngestError (업로드 화면에 그대로 보여 준다)."""
+    if not content.strip():
+        raise IngestError("빈 파일입니다. 내용이 있는 CSV를 올려 주세요.")
+    for enc in ("utf-8-sig", "cp949"):
+        try:
+            text_ = content.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise IngestError("파일 인코딩을 읽을 수 없습니다. UTF-8 또는 CP949(엑셀 기본) CSV로 저장해 주세요.")
+    try:
+        return pd.read_csv(io.StringIO(text_), dtype=str, keep_default_na=False)
+    except pd.errors.EmptyDataError:
+        raise IngestError("빈 파일입니다. 내용이 있는 CSV를 올려 주세요.") from None
+    except pd.errors.ParserError:
+        raise IngestError("CSV 형식을 읽을 수 없습니다. 따옴표·쉼표가 깨졌는지 확인해 주세요.") from None
+
+
 def parse_csv(content: bytes, filename: str):
     """CSV를 읽어 DB에 넣을 표로 정리한다. 반환: (종류, 표)."""
-    raw = pd.read_csv(io.BytesIO(content), dtype=str, keep_default_na=False)
+    raw = _read_raw(content)
     kind = detect_kind(raw.columns)
     cols = PRESSURE_COLS if kind == "pressure" else MOISTURE_COLS
     # 같은 원본 행 = 같은 해시 (파일 이름과 무관)

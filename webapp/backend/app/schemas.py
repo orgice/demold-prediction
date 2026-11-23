@@ -159,14 +159,16 @@ class UploadPatch(BaseModel):
 
 
 class UploadOut(BaseModel):
-    """CSV 업로드 결과: 전체 행 수, 새로 저장된 행 수(중복 제외), 기간, 센서."""
+    """CSV 업로드 결과: 전체 행 수, 새로 저장된 행 수(중복 제외), 기간, 센서.
+    여러 파일 중 일부가 실패하면 그 파일은 error 에 사유를 담고 나머지 값은 비운다 (저장된 행 없음)."""
     filename: str
-    kind: str
-    rows_total: int
-    rows_inserted: int
-    period_start: datetime | None
-    period_end: datetime | None
-    sensors: list[str]
+    kind: str = ""
+    rows_total: int = 0
+    rows_inserted: int = 0
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    sensors: list[str] = []
+    error: str | None = None
 
 
 class ExclusionIn(BaseModel):
