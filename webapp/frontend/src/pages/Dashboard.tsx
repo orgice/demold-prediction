@@ -7,7 +7,7 @@
 //   ⑥ 새 타설 감지 (맨 위): 실시간 수집 센서에서 찾은 미등록 타설 → 확인 후 회차로 등록 (components/LiveCandidates.tsx)
 // 진행 중 회차 = 타설 후 28일이 지나지 않은 회차. 센서 데이터는 10분마다 자동 수집되므로(delta_sync.py)
 // 화면도 10분마다 회차와 예측을 다시 불러온다 (탭이 보일 때만).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, MEMBER_LABEL, Pour, Prediction } from "../api/client";
 import { useCanEdit } from "../auth/AuthContext";
@@ -19,7 +19,7 @@ import NewPourModal, { pourUrl } from "../components/NewPourModal";
 import {
   CompareItem, CompareStrengthChart, CompareTempChart, isComplete, pourColor, StrengthChart, TempChart,
 } from "../components/StrengthChart";
-import { fmtAge, fmtDateTime, hoursBetween } from "../format";
+import { fmtAge, fmtDateTime, hoursBetween, nowKst } from "../format";
 
 const ACTIVE_DAYS = 28;
 const REFRESH_MS = 10 * 60_000;   // 센서 자동 수집 주기와 같게
@@ -29,13 +29,12 @@ type View = "overlay" | "separate";
 const startOf = (p: Pour) => p.pour_start ?? p.detected_start;
 /** 펼침 꺾쇠 (aria-expanded="true"인 버튼 안에서 90° 회전) */
 const CHEVRON = <svg className="chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 4l4 4-4 4" /></svg>;
-const nowIso = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
 
 /** 진행 중: 타설 시작 후 28일 이내 */
 export function isActive(p: Pour) {
   const s = startOf(p);
   if (!s) return false;
-  const h = hoursBetween(s, nowIso());
+  const h = hoursBetween(s, nowKst());
   return h >= 0 && h < ACTIVE_DAYS * 24;
 }
 
@@ -85,6 +84,7 @@ export default function Dashboard() {
 
   // 선택한 회차의 예측을 불러온다 (이미 불러온 회차는 다시 부르지 않음)
   const key = selectedIds.join(",");
+  const [reloadTick, setReloadTick] = useState(0);   // 다시 불러오기(10분 갱신·다시 시도) 때마다 증가 → 지운 예측을 다시 부른다
   useEffect(() => {
     if (demo) {
       setPreds(Object.fromEntries(demoData().map((d) => [d.pour.id, { data: d.pred }])));
@@ -97,9 +97,14 @@ export default function Dashboard() {
         .then((data) => setPreds((s) => ({ ...s, [id]: { data } })))
         .catch((e) => setPreds((s) => ({ ...s, [id]: { error: String(e.message ?? e) } })));
     }
-  }, [key, demo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, demo, reloadTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const retry = () => { setPreds({}); pours.reload(); };
+  const retry = () => { setPreds({}); setReloadTick((t) => t + 1); pours.reload(); };
+  // 회차 하나의 예측만 다시 부른다 (예측 실패 카드의 '다시 시도')
+  const retryPred = (id: number) => {
+    setPreds((s) => { const { [id]: _, ...rest } = s; return rest; });
+    setReloadTick((t) => t + 1);
+  };
 
   // 실시간 수집 데이터 반영: 10분마다 회차·예측을 다시 불러온다 (탭이 보일 때만, 예시 모드 제외)
   useEffect(() => {
@@ -125,7 +130,7 @@ export default function Dashboard() {
   }
   if (!list) return <main className="page"><Loading /></main>;
 
-  const items = selectedIds.map((id) => ({ pour: byId.get(id)!, state: preds[id] ?? {} }));
+  const items: Item[] = selectedIds.map((id) => ({ pour: byId.get(id)!, state: preds[id] ?? {}, retry: () => retryPred(id) }));
   const alerts = buildAlerts(items);
   const checks = demo ? [] : checkItems(active);   // 예시 화면에서는 확인 필요를 만들지 않는다
   const count = alerts.unsent + checks.length;
@@ -222,7 +227,7 @@ function Banner({ active, sorted, mainIds, mainSel, onPick, demo }: {
   const main = sorted.find((p) => p.id === mainIds[0]);
   const options = active.length > 0 ? active : sorted;
   const value = mainSel === "all" ? "all" : String(mainIds[0] ?? "");
-  const elapsed = (p: Pour) => fmtAge(hoursBetween(startOf(p)!, nowIso()));
+  const elapsed = (p: Pour) => fmtAge(hoursBetween(startOf(p)!, nowKst()));
   return (
     <section className="banner">
       <div className="grow">
@@ -298,19 +303,30 @@ function CheckSection({ items }: { items: CheckItem[] }) {
 function PrevPicker({ previous, picked, onChange }: { previous: Pour[]; picked: number[]; onChange: (ids: number[]) => void }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const boxRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  // 열려 있을 때 바깥을 누르거나 Esc를 누르면 닫는다
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => { if (!boxRef.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); btnRef.current?.focus(); } };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
   const shown = previous.filter((p) => title(p).toLowerCase().includes(q.trim().toLowerCase()));
   const full = picked.length >= MAX_PREV;
   const toggle = (id: number) => onChange(picked.includes(id) ? picked.filter((x) => x !== id) : full ? picked : [...picked, id]);
   return (
-    <div className="picker">
-      <button className="btn sm" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+    <div className="picker" ref={boxRef}>
+      <button ref={btnRef} className="btn sm" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {CHEVRON} 이전 회차 선택{picked.length ? ` · ${picked.length}개` : ""}
       </button>
       {open && (
         <div className="picker-pop">
           <input placeholder="회차명 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="회차명 검색" />
           <div className="row">
-            <button className="btn sm" onClick={() => onChange(previous.slice(0, MAX_PREV).map((p) => p.id))}>전체 선택</button>
+            <button className="btn sm" onClick={() => onChange(shown.slice(0, MAX_PREV).map((p) => p.id))}>전체 선택</button>
             <button className="btn sm" onClick={() => onChange([])}>선택 해제</button>
           </div>
           {previous.length > MAX_PREV && <div className="tiny">최대 {MAX_PREV}개 (전체 선택 = 최근 {MAX_PREV}개)</div>}
@@ -332,7 +348,7 @@ function PrevPicker({ previous, picked, onChange }: { previous: Pour[]; picked: 
 }
 
 // ---------------- 회차 요약 ----------------
-type Item = { pour: Pour; state: PredState };
+type Item = { pour: Pour; state: PredState; retry?: () => void };
 /** 예측 강도·보정 카드의 접힘 상태 (모든 회차 카드가 함께 쓴다) */
 type Fold = { open: boolean; toggle: () => void };
 
@@ -422,8 +438,13 @@ function statusText(pred?: Prediction) {
     : `진행 중 · 현재 ${pred.current_strength.toFixed(1)} / 28일 예측 ${pred.strength_28d.toFixed(1)} MPa`;
 }
 
-function PredFallback({ state }: { state: PredState }) {
-  if (state.error) return <div className="alert warn small">예측할 수 없습니다: {state.error}</div>;
+function PredFallback({ state, onRetry }: { state: PredState; onRetry?: () => void }) {
+  if (state.error) return (
+    <div className="alert warn small alert-inline">
+      <span>예측할 수 없습니다: {state.error}</span>
+      {onRetry && <button className="btn sm" onClick={onRetry}>다시 시도</button>}
+    </div>
+  );
   return <Loading text="예측 계산 중…" />;
 }
 
@@ -448,7 +469,7 @@ function BigCard({ item: it, color, demo, open, onToggle, yMax, kpi }: {
             <TempChart pred={pred} />
           </div>
         </>
-      ) : <PredFallback state={it.state} />}
+      ) : <PredFallback state={it.state} onRetry={it.retry} />}
     </div>
   );
 }
@@ -476,13 +497,15 @@ function Overlay({ items, colorOf, demo, kpi }: { items: Item[]; colorOf: (id: n
             <SummaryHead item={it} color={colorOf(it.pour.id)} demo={demo} open={!!open[it.pour.id]}
               onToggle={() => toggle(it.pour.id)} />
             <div className="tiny">{it.state.data ? statusText(it.state.data) : it.state.error ? `예측 불가: ${it.state.error}` : "계산 중…"}</div>
+            {it.state.error && it.retry && <div><button className="btn sm" onClick={it.retry}>다시 시도</button></div>}
             {it.state.data && <Milestones pred={it.state.data} open={!!open[it.pour.id]} />}
           </div>
         ))}
       </div>
       <div>
         <h3>압축강도 예측 비교<Info align="right">회차별 진한 선은 실측 온도로 계산한 강도, 옅은 점선은 예측, 점은 공시체 시험 결과입니다.</Info></h3>
-        {ready.length > 0 ? <CompareStrengthChart items={ready} /> : <Loading text="예측 계산 중…" />}
+        {ready.length > 0 ? <CompareStrengthChart items={ready} />
+          : !items.every((i) => i.state.error) && <Loading text="예측 계산 중…" />}
       </div>
       {ready.length > 0 && (
         <div>
@@ -535,7 +558,7 @@ function Separate({ items, colorOf, demo, kpi }: { items: Item[]; colorOf: (id: 
                       <TempChart pred={pred} compact height={half ? 150 : 120} />
                     </div>
                   </>
-                ) : <PredFallback state={it.state} />}
+                ) : <PredFallback state={it.state} onRetry={it.retry} />}
               </div>
             );
           })}

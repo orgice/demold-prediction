@@ -34,6 +34,12 @@ export function addHours(iso: string, h: number): string {
   return d.toISOString().slice(0, 19);
 }
 
+/** 지금 한국 시각 (시간대 없는 ISO). 서버가 모든 시각을 한국 현지 시각으로 저장하므로
+ *  기기 시간대(해외·UTC 설정 등)와 상관없이 같은 기준으로 비교한다. 한국은 서머타임이 없어 +9시간 고정 */
+export function nowKst(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 19);
+}
+
 /** 두 시각 사이가 몇 시간인지 (b − a) */
 export function hoursBetween(a: string, b: string): number {
   return (new Date(`${b.slice(0, 19)}Z`).getTime() - new Date(`${a.slice(0, 19)}Z`).getTime()) / 3600_000;

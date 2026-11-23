@@ -11,7 +11,7 @@ const SPECS: DemoSpec[] = [
   { id: -3, name: "예시 3회차", site: "C동 슬래브", member: "slab", daysAgo: 1.5, su: 27, k: 0.011, temp: 24, design: 27 },
 ];
 
-const hourIso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 13) + ":00:00";
+const hourIso = (d: Date) => new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 13) + ":00:00";   // 한국 시각 기준 (format.nowKst 와 같게)
 
 function build(spec: DemoSpec): { pour: Pour; pred: Prediction } {
   const start = hourIso(new Date(Date.now() - spec.daysAgo * 86400_000));

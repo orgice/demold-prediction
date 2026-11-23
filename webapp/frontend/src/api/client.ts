@@ -207,20 +207,54 @@ function toLoginIfExpired(path: string, res: Response) {
   if (res.status === 403) window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
 }
 
+// 사용자에게 보여 줄 오류 문구 (서버가 준 설명이 없거나 개발자용일 때)
+export const NETWORK_ERROR_MSG = "서버에 연결할 수 없습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.";
+export const SERVER_ERROR_MSG = "서버에서 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+export const AI_NOT_CONFIGURED_MSG = "AI 상담이 아직 설정되지 않았습니다. 관리자에게 문의해 주세요.";
+
+/** 서버 문구 중 개발자용(설정 파일 안내 등)을 사용자용으로 바꾼다 */
+function friendly(msg: string): string {
+  return /LLM_BASE_URL|LLM_API_KEY/.test(msg) ? AI_NOT_CONFIGURED_MSG : msg;
+}
+
+/** 입력 검사 오류(422) 한 줄을 한국어로 (서버가 직접 쓴 'Value error, …' 문구는 그대로) */
+type ValidationItem = { type?: string; msg?: string; ctx?: { gt?: number } };
+function validationText(d: ValidationItem): string {
+  if (d.type === "value_error") return (d.msg ?? "").replace(/^Value error, /, "");
+  if (d.type === "greater_than") return `${d.ctx?.gt ?? 0}보다 큰 값을 입력해 주세요.`;
+  if (d.type === "float_parsing" || d.type === "int_parsing" || d.type === "decimal_parsing" || d.type === "int_from_float")
+    return "숫자를 입력해 주세요.";
+  if (d.type === "missing") return "필수 항목을 입력해 주세요.";
+  return "입력값을 확인해 주세요.";
+}
+
+/** 실패한 응답에서 보여 줄 문구를 만든다 */
+async function errorMessage(res: Response): Promise<string> {
+  let msg = res.status >= 500 ? SERVER_ERROR_MSG : `${res.status} ${res.statusText}`.trim();
+  try {
+    const body = await res.json();
+    if (typeof body.detail === "string") msg = friendly(body.detail);
+    // 입력 검사 오류(422)는 [{type, msg, ctx}] 목록으로 온다 → 항목별 한국어 문구 (같은 문구는 한 번만)
+    else if (Array.isArray(body.detail)) msg = [...new Set(body.detail.map(validationText))].join(" / ");
+  } catch { /* 본문 없음 */ }
+  return msg;
+}
+
+/** fetch 자체가 실패(서버 꺼짐·네트워크 끊김)하면 안내 문구로 ApiError를 던진다 */
+async function send(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(path, init);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    throw new ApiError(NETWORK_ERROR_MSG);
+  }
+}
+
 /** 서버에 요청을 보내고 JSON 결과를 받는다. 실패하면 서버가 준 오류 문구로 ApiError를 던진다 */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+  const res = await send(path, init);
   toLoginIfExpired(path, res);
-  if (!res.ok) {
-    let msg = `${res.status} ${res.statusText}`;
-    try {
-      const body = await res.json();
-      if (typeof body.detail === "string") msg = body.detail;
-      // 입력 검사 오류(422)는 [{msg: "Value error, …"}] 목록으로 온다 → 문구만 꺼낸다
-      else if (Array.isArray(body.detail)) msg = body.detail.map((d: { msg?: string }) => (d.msg ?? "").replace(/^Value error, /, "")).join(" / ");
-    } catch { /* 본문 없음 */ }
-    throw new ApiError(msg);
-  }
+  if (!res.ok) throw new ApiError(await errorMessage(res));
   return res.status === 204 ? (undefined as T) : res.json();
 }
 
@@ -312,25 +346,24 @@ export type AgentEvent =
 
 /** AI에게 질문하고, 진행 상황·답변 글자를 오는 대로 onEvent 로 넘긴다. 서버가 error 이벤트를 보내면 ApiError 를 던진다 */
 async function askStream(question: string, history: ChatMessage[], onEvent: (e: AgentEvent) => void): Promise<void> {
-  const res = await fetch("/api/agent/ask/stream", json("POST", { question, history }));
+  const res = await send("/api/agent/ask/stream", json("POST", { question, history }));
   toLoginIfExpired("/api/agent/ask/stream", res);
-  if (!res.ok || !res.body) {
-    let msg = `${res.status} ${res.statusText}`;
-    try { const b = await res.json(); if (typeof b.detail === "string") msg = b.detail; } catch { /* 본문 없음 */ }
-    throw new ApiError(msg);
-  }
+  if (!res.ok) throw new ApiError(await errorMessage(res));
+  if (!res.body) throw new ApiError(SERVER_ERROR_MSG);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
   for (;;) {
-    const { done, value } = await reader.read();
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try { chunk = await reader.read(); } catch { throw new ApiError(NETWORK_ERROR_MSG); }   // 답변 도중 연결이 끊김
+    const { done, value } = chunk;
     buf += decoder.decode(value, { stream: !done });
     const lines = buf.split("\n");
     buf = lines.pop() ?? "";            // 마지막 줄은 아직 덜 왔을 수 있어 남겨 둔다
     for (const line of lines) {
       if (!line.trim()) continue;
       const ev = JSON.parse(line) as AgentEvent;
-      if (ev.type === "error") throw new ApiError(ev.message);
+      if (ev.type === "error") throw new ApiError(friendly(ev.message));
       onEvent(ev);
     }
     if (done) break;

@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, MEMBER_LABEL } from "../api/client";
-import { ErrorBox, Loading, MilestoneBadge, useAsync } from "../components/common";
+import { ErrorBox, Loading, MilestoneBadge, NO_START_VIEWER_MSG, useAsync } from "../components/common";
 import NewPourModal, { pourUrl } from "../components/NewPourModal";
 import { useCanEdit } from "../auth/AuthContext";
 import { fmtAge, fmtDateTime, fmtFull } from "../format";
 
 export default function PourList() {
-  const { data, error, loading } = useAsync(api.summary, []);   // 회차별 예측 요약
+  const { data, error, loading, reload } = useAsync(api.summary, []);   // 회차별 예측 요약
   const [creating, setCreating] = useState(false);              // 새 타설 등록 창이 열려 있는지
   const canEdit = useCanEdit();                                 // 보기 계정에게는 등록 버튼을 숨긴다
   const nav = useNavigate();
@@ -28,7 +28,7 @@ export default function PourList() {
         </div>
         {canEdit && <button className="btn primary" onClick={() => setCreating(true)}>+ 새 타설 등록</button>}
       </div>
-      <ErrorBox error={error} />
+      <ErrorBox error={error} onRetry={reload} />
       {loading && <Loading text="예측 계산 중…" />}
       {data?.length === 0 && <div className="alert info">등록된 회차가 없습니다.{canEdit && " ‘새 타설 등록’으로 시작하세요."}</div>}
       {!!data?.length && (
@@ -47,7 +47,9 @@ export default function PourList() {
                 <h2>{pour.name}{pour.member && <span className="badge neutral badge-gap">{MEMBER_LABEL[pour.member]}</span>}</h2>
                 <div className="tiny">
                   타설 {fmtFull(pour.pour_start ?? pour.detected_start)}{" "}
-                  {pour.pour_start ? <span className="badge neutral">확정</span> : <span className="badge warn">자동 추정</span>}
+                  {pour.pour_start ? <span className="badge neutral">확정</span>
+                    : pour.detected_start ? <span className="badge warn">자동 추정</span>
+                    : <span className="badge warn">타설 시각 미입력</span>}
                 </div>
               </div>
               {current_strength != null && (
@@ -58,7 +60,8 @@ export default function PourList() {
                 </div>
               )}
             </div>
-            {error && <div className="alert warn small">{error}</div>}
+            {error && <div className="alert warn small">{!canEdit && !pour.pour_start && !pour.detected_start
+              ? NO_START_VIEWER_MSG : error}</div>}
             {milestones && (
               <table>
                 <tbody>

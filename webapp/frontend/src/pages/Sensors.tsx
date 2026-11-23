@@ -13,7 +13,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, Pour, SensorInfo, SeriesResponse } from "../api/client";
 import { sensorName, sensorsApi } from "../api/sensors";
 import { DeleteSensorModal, SensorChipMenu } from "../components/SensorChipMenu";
-import { Chart, sensorColor } from "../components/Chart";
+import { Chart, sensorColor, useChartTheme } from "../components/Chart";
 import { ErrorBox, Info, Loading, useAsync } from "../components/common";
 import DeltaStatus from "../components/DeltaStatus";
 import UploadPanel from "../components/UploadPanel";
@@ -37,6 +37,7 @@ const dateOf = (iso: string) => iso.slice(0, 10);
 
 export default function Sensors() {
   const canEdit = useCanEdit();   // CSV 불러오기는 편집 권한 이상만
+  const chartTheme = useChartTheme();
   const sensors = useAsync(sensorsApi.list, []);   // 숨긴 센서 포함 (hidden 표시)
   const pours = useAsync(api.pours, []);
   const [params, setParams] = useSearchParams();
@@ -46,6 +47,7 @@ export default function Sensors() {
   const [macs, setMacs] = useState<string[]>([]);
   const [data, setData] = useState<SeriesResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [seriesTick, setSeriesTick] = useState(0);   // '다시 시도'로 측정값을 다시 불러올 때 증가
   const [loading, setLoading] = useState(false);
   const [inited, setInited] = useState(false);
   const [showHidden, setShowHidden] = useState(false);   // 숨긴 센서 칩도 보기
@@ -93,7 +95,7 @@ export default function Sensors() {
       api.series(macs, start, end).then(setData).catch((e) => setErr(e.message)).finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(t);
-  }, [macs.join(","), start, end, rangeError]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [macs.join(","), start, end, rangeError, seriesTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 센서를 켤 때 지금 기간에 그 센서 기록이 없으면(또는 처음 고른 센서면) 기간을 그 센서의 수집 기간으로 맞춘다
   // 수집 기간이 MAX_DAYS보다 길면 마지막 MAX_DAYS일만
@@ -179,7 +181,8 @@ export default function Sensors() {
           onDeleted={(text) => { const mac = toDelete.mac; setToDelete(null); setNote({ text }); onSensorChanged(null, mac); }} />
       )}
 
-      <ErrorBox error={err ?? sensors.error ?? pours.error} />
+      <ErrorBox error={err ?? sensors.error ?? pours.error}
+        onRetry={() => { if (sensors.error) sensors.reload(); if (pours.error) pours.reload(); if (err) setSeriesTick((t) => t + 1); }} />
       {loading && <Loading />}
       {!loading && macs.length === 0 && all.length > 0 && <div className="alert info">센서를 하나 이상 선택하세요.</div>}
       {data && Object.keys(data.sensors).length === 0 && <div className="alert info">선택한 기간에 이 센서들의 기록이 없습니다.</div>}
@@ -191,7 +194,8 @@ export default function Sensors() {
             <h3 className="mb-2">{title}</h3>
             <Chart height={260} option={{
               tooltip: { trigger: "axis", valueFormatter: (v: number) => (v == null ? "—" : `${Number(v).toFixed(1)} ${unit}`) },
-              xAxis: { type: "time" },
+              // 눈금 글자를 한국식으로 (기본값은 영어 월 이름 'Oct' 등이 섞임)
+              xAxis: { type: "time", axisLabel: { color: chartTheme.text, formatter: { year: "{yyyy}년", month: "{M}월", day: "{d}", hour: "{HH}:{mm}", minute: "{HH}:{mm}" } } },
               yAxis: { type: "value", name: unit, scale: true },
               dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 4 }],
               series: series.map(([mac, s]) => {
