@@ -41,6 +41,15 @@ function defaultExamples(pours: Pour[] | null | undefined): string[] {
   ];
 }
 
+// 처음 화면에 보여 주는 '물어볼 수 있는 것' (backend agent.py 의 도구 4개와 맞춤)
+const CAPABILITIES = [
+  "회차 목록: 진행 중인 회차, 타설 시각, 경과일, 부재·설계기준강도",
+  "강도 예측: 지금 압축강도, 28일 강도, 공시체 결과 반영 여부",
+  "해체 시점: 벽체·슬래브 해체 기준에 언제 닿는지 (예상·보수적 시각), 특정 시각 기준 예측",
+  "내부온도: 센서가 잰 콘크리트 온도의 최저·최고·평균 (기간 지정 가능)",
+  "해체 기준: 거푸집 및 동바리 해체 가이드라인(2023) 내용",
+];
+
 // 도구 이름을 화면에 보여 줄 한국어로 (목록에 없으면 영어 이름 그대로)
 const TOOL_LABEL: Record<string, string> = {
   list_pours: "회차 목록 조회",
@@ -138,7 +147,13 @@ export default function Assistant() {
       <div className="card chat-log">
         {turns.length === 0 && (
           <div className="chat-empty">
-            <div className="muted small">이런 질문을 해 보세요</div>
+            <div className="small">
+              <div className="muted">이런 것을 물어볼 수 있어요</div>
+              <ul style={{ margin: "6px 0 0", paddingLeft: 20 }}>
+                {CAPABILITIES.map((c) => <li key={c}>{c}</li>)}
+              </ul>
+            </div>
+            <div className="muted small">눌러서 바로 물어보기</div>
             <div className="chips">
               {examples.map((q) => <button key={q} className="chip" onClick={() => send(q)}>{q}</button>)}
             </div>
