@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
-from .. import notify
+from .. import health, notify
 from ..auth import current_user, require_role
 from ..config import NOTIFY_INTERVAL_MIN, SMTP_FROM, SMTP_HOST
 from ..security import kst_now
@@ -23,7 +23,8 @@ EMAIL = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
 def notify_status():
     """자동 발송 상태. enabled=false 면 화면에서 메일 초안만 쓴다."""
     return {"enabled": notify.ENABLED, "interval_min": NOTIFY_INTERVAL_MIN,
-            "sender": SMTP_FROM if notify.ENABLED else None, **notify.status}
+            "sender": SMTP_FROM if notify.ENABLED else None, **notify.status,
+            "failing": health.status()}   # 지금 계속 실패 중인 백그라운드 작업 (장애 알림, health.py)
 
 
 class TestIn(BaseModel):

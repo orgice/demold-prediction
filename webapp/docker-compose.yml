@@ -51,6 +51,7 @@ services:
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-FormCast}
       NOTIFY_INTERVAL_MIN: ${NOTIFY_INTERVAL_MIN:-10}
       APP_URL: ${APP_URL:-}
+      ALERT_EMAILS: ${ALERT_EMAILS:-}         # 장애 알림 받을 주소 (비우면 SMTP_FROM)
       DELTA_SYNC_INTERVAL_MIN: ${DELTA_SYNC_INTERVAL_MIN:-10}   # 센서 데이터 자동 수집 주기 (분)
       COOKIE_SECURE: ${COOKIE_SECURE:-false}   # HTTPS(caddy)로 들어온 요청은 이 값과 관계없이 HTTPS 전용 쿠키
     depends_on:

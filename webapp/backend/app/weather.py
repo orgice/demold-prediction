@@ -27,6 +27,7 @@ from sqlalchemy import text
 
 from .config import (CLIMATE_STATION, CLIMATE_YEARS, FORECAST_INTERVAL_MIN, FORECAST_MAX_AGE_H, FORECAST_NX,
                      FORECAST_NY, KMA_SERVICE_KEY)
+from . import health
 from .db import engine
 from .models import ClimateNormal, WeatherForecast
 from .security import kst_now
@@ -188,20 +189,27 @@ def normal(idx: pd.DatetimeIndex) -> pd.Series | None:
 # ━━━━━━━━━━ 백그라운드 실행 ━━━━━━━━━━
 def _loop() -> None:
     time.sleep(15)   # 서버가 다 켜진 뒤 시작
-    if CLIMATE_ON:
-        try:
-            n = build_climate()
-            if n:
-                print(f"[weather] 평년 기온 표를 만들었습니다: 관측소 {CLIMATE_STATION}, {n}행", flush=True)
-        except Exception as e:   # 실패하면 다음 서버 시작 때 다시 시도. 그동안 예보 이후는 예보 마지막 하루 반복
-            print(f"[weather] 평년 기온 만들기 실패: {e}", flush=True)
-    while FORECAST_ON:
-        try:
-            n = fetch_recent()
-            if n:
-                print(f"[weather] 단기예보 {n}시간치 저장", flush=True)
-        except Exception as e:
-            print(f"[weather] 단기예보 받기 실패: {e}", flush=True)
+    climate_ok = not CLIMATE_ON
+    while FORECAST_ON or not climate_ok:
+        if not climate_ok:   # 실패하면 다음 확인 때 다시 시도. 그동안 예보 이후는 예보 마지막 하루 반복
+            try:
+                n = build_climate()
+                if n:
+                    print(f"[weather] 평년 기온 표를 만들었습니다: 관측소 {CLIMATE_STATION}, {n}행", flush=True)
+                climate_ok = True
+                health.report("climate", True)
+            except Exception as e:
+                print(f"[weather] 평년 기온 만들기 실패: {e}", flush=True)
+                health.report("climate", False, f"{type(e).__name__}: {e}")
+        if FORECAST_ON:
+            try:
+                n = fetch_recent()
+                if n:
+                    print(f"[weather] 단기예보 {n}시간치 저장", flush=True)
+                health.report("weather", True)
+            except Exception as e:
+                print(f"[weather] 단기예보 받기 실패: {e}", flush=True)
+                health.report("weather", False, f"{type(e).__name__}: {e}")
         time.sleep(FORECAST_INTERVAL_MIN * 60)
 
 

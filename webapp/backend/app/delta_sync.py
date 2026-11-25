@@ -34,7 +34,7 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 from sqlalchemy import select, text
 
-from . import maturity
+from . import health, maturity
 from .config import (DELTA_LOOKBACK_H, DELTA_SHARE_FILE, DELTA_SYNC_INTERVAL_MIN, DELTA_TABLES, DELTA_UTC_OFFSET_H)
 from .db import SessionLocal, engine
 from .ingest import INT_COLS, MAC_RE, MOISTURE_COLS, PRESSURE_COLS, _insert, rebuild_10min
@@ -238,6 +238,7 @@ def run_once() -> dict:
         else:
             print(f"[delta] 수집 실패: {status['last_error']}", flush=True)
         _lock.release()
+        health.report("delta", not errors, status["last_error"])   # 계속 실패하면 관리자에게 메일
     return result
 
 
