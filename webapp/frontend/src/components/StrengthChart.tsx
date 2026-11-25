@@ -136,7 +136,8 @@ export function StrengthChart({ pred, height = 380, compact = false, yMax }: {
         endLabel: compact ? undefined : { show: true, formatter: narrow ? `${f1(pred.strength_28d)}` : `${f1(pred.strength_28d)} MPa`,
           color: LINE.forecast, fontWeight: 700, fontSize: narrow ? 11 : 12,
           // 휴대폰: 오른쪽 여백을 비우려고 선 끝 아래쪽, 그래프 안에 둔다 (위쪽은 최초 예측선과 겹친다)
-          ...(narrow ? { align: "right", verticalAlign: "top", offset: [-2, 6] } : {}) } },
+          // distance 0: 기본 간격(8px)만큼 오른쪽으로 밀려 끝자리(15.0의 .0)가 그래프 밖으로 잘리던 문제
+          ...(narrow ? { align: "right", verticalAlign: "top", distance: 0, offset: [-4, 6] } : {}) } },
       ...(pred.baseline ? [{
         name: "최초 예측", type: "line", symbol: "none", z: 1,
         data: pred.baseline.series.map((b) => [day(b.age_h), b.strength]),
