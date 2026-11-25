@@ -70,6 +70,7 @@ def create_tables():
             c.execute(text(f"CREATE INDEX IF NOT EXISTS ix_{t}_upload ON {t} (upload_id)"))
         c.execute(text("ALTER TABLE upload_log ADD COLUMN IF NOT EXISTS label VARCHAR(100) NULL"))
         c.execute(text("ALTER TABLE upload_log ADD COLUMN IF NOT EXISTS sensors VARCHAR(500) NULL"))
+        c.execute(text("ALTER TABLE weather_forecast ADD COLUMN IF NOT EXISTS source VARCHAR(10) NOT NULL DEFAULT 'fcst'"))
     link_legacy_rows(engine)   # upload_id 가 없던 기존 원본 행을 업로드 기록에 연결 (처음 한 번만 오래 걸림)
     ensure_first_admin()
     ensure_test_users()
