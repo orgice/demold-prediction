@@ -35,6 +35,7 @@ FCST_URL = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageF
 ASOS_URL = "https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList"
 BASE_HOURS = (2, 5, 8, 11, 14, 17, 20, 23)   # 단기예보 발표 시각
 READY_MIN = 15                               # 발표 후 이만큼 지나야 API에서 받을 수 있다
+BACKFILL_H = 24                              # 최근 이 시간 안의 발표분 중 빠진 것을 채워 받는다 (fetch_recent)
 
 FORECAST_ON = bool(KMA_SERVICE_KEY and FORECAST_NX and FORECAST_NY)
 CLIMATE_ON = bool(KMA_SERVICE_KEY and CLIMATE_STATION)
@@ -79,6 +80,21 @@ def fetch_forecast(base: datetime | None = None) -> int:
         with engine.begin() as c:
             c.execute(WeatherForecast.__table__.insert().prefix_with("IGNORE"), rows)
     return len(rows)
+
+
+def fetch_recent(hours: int = BACKFILL_H) -> int:
+    """최근 hours 시간 안의 발표분 중 아직 없는 예보를 모두 받는다. 저장한 행 수.
+
+    센서 데이터는 몇 시간 늦게 들어오기도 해서, 예측 기준 시각(마지막 센서 시각)이 최신 발표보다 앞설 수 있다.
+    그때는 기준 시각 이전 발표분이 있어야 예보를 쓸 수 있으므로, 서버를 껐다 켜거나 받기에 실패해 빠진 발표분을 채운다.
+    (기상청 API는 최근 며칠치 발표분을 다시 받을 수 있다)
+    """
+    base = latest_base(kst_now())
+    total = 0
+    while base >= kst_now() - timedelta(hours=hours):
+        total += fetch_forecast(base)
+        base = latest_base(base - timedelta(minutes=1) + timedelta(minutes=READY_MIN))   # 바로 앞 발표 시각
+    return total
 
 
 def forecast_at(as_of: datetime) -> pd.Series | None:
@@ -175,7 +191,7 @@ def _loop() -> None:
             print(f"[weather] 평년 기온 만들기 실패: {e}", flush=True)
     while FORECAST_ON:
         try:
-            n = fetch_forecast()
+            n = fetch_recent()
             if n:
                 print(f"[weather] 단기예보 {n}시간치 저장", flush=True)
         except Exception as e:
