@@ -100,6 +100,9 @@ class WeatherForecast(Base):
     nx: Mapped[int] = mapped_column(Integer, primary_key=True)                # 예보 격자 좌표
     ny: Mapped[int] = mapped_column(Integer, primary_key=True)
     temp: Mapped[float] = mapped_column(Float)                                # 1시간 기온 (℃)
+    # fcst = 기상청 단기예보. obs = 그때 예보를 받아 두지 못해 나중에 ASOS 관측 기온으로 대신 채운 것
+    # (scripts.backfill_obs_forecast, 완벽한 예보를 가정하는 셈이라 실제 예보보다 잘 맞아 보인다)
+    source: Mapped[str] = mapped_column(String(10), default="fcst", server_default="fcst")
 
 
 class ClimateNormal(Base):

@@ -100,6 +100,8 @@ def fetch_recent(hours: int = BACKFILL_H) -> int:
 def forecast_at(as_of: datetime) -> pd.Series | None:
     """기준 시각 as_of 에 알 수 있었던 가장 최근 예보 (예보 대상 시각 → 기온 ℃, 1시간 간격).
 
+    관측값으로 대신 채운 예보면 결과의 attrs["source"] 가 "obs" (아니면 "fcst").
+
     as_of 보다 늦게 나온 예보는 쓰지 않는다 (그때는 몰랐으므로). FORECAST_MAX_AGE_H 보다 오래된 예보만 있으면 None.
     """
     if not FORECAST_ON:
@@ -112,9 +114,13 @@ def forecast_at(as_of: datetime) -> pd.Series | None:
              "t0": as_of - timedelta(hours=FORECAST_MAX_AGE_H)}).scalar()
         if base is None:
             return None
-        d = pd.read_sql(text("SELECT fcst_time, temp FROM weather_forecast WHERE nx=:x AND ny=:y AND base_time=:b "
+        d = pd.read_sql(text("SELECT fcst_time, temp, source FROM weather_forecast WHERE nx=:x AND ny=:y AND base_time=:b "
                              "ORDER BY fcst_time"), c, params={"x": FORECAST_NX, "y": FORECAST_NY, "b": base})
-    return d.set_index("fcst_time").temp if not d.empty else None
+    if d.empty:
+        return None
+    s = d.set_index("fcst_time").temp
+    s.attrs["source"] = "obs" if (d.source == "obs").any() else "fcst"   # 관측값으로 대신 채운 예보인지
+    return s
 
 
 # ━━━━━━━━━━ 2. 평년 기온 ━━━━━━━━━━
