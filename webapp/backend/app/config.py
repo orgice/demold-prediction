@@ -80,3 +80,17 @@ FIXED_CURVE_SIGMA = 0.3       # 고정 곡선의 로그 오차 (교차검증 불
 
 # "최초 예상" 기준선: 타설 후 이 시간까지의 데이터로 했던 예측을 계획으로 보고 현재 예측과 비교
 BASELINE_HOURS = 24
+
+# ---- 앞으로의 온도: 기상청 예보·평년 기온 (weather.py, maturity.forecast_temperature) ----
+# 공공데이터포털 인증키 (단기예보·ASOS 시간자료 활용신청 필요). 비우면 예보를 쓰지 않고 직전 24시간 반복으로 가정
+KMA_SERVICE_KEY = os.environ.get("KMA_SERVICE_KEY", "").strip()
+# 현장 위치: 단기예보 격자 좌표(nx, ny)와 평년 기온을 만들 가까운 ASOS 관측소 번호. 비우면 각각 쓰지 않는다
+FORECAST_NX = int(os.environ.get("FORECAST_NX", "") or 0) or None
+FORECAST_NY = int(os.environ.get("FORECAST_NY", "") or 0) or None
+CLIMATE_STATION = int(os.environ.get("CLIMATE_STATION", "") or 0) or None
+FORECAST_INTERVAL_MIN = 60    # 몇 분마다 새 예보를 확인할지 (예보는 3시간마다 나온다)
+FORECAST_MAX_AGE_H = 12       # 기준 시각보다 이만큼 넘게 오래된 예보는 쓰지 않는다 (직전 24시간 반복으로 대체)
+CLIMATE_YEARS = 5             # 평년 기온: 지난 몇 년의 같은 날·같은 시각 기온을 평균할지
+# 콘크리트 내부온도 = 외기 + 차이. 차이는 직전 24시간 값에서 시작해 장기 차이로 줄어든다 (수화열이 식는 것)
+AMBIENT_OFFSET_INF = 0.6      # 장기 차이 (℃). 2026년 회차들의 재령 3~7일 '내부 − 외기' 중앙값
+AMBIENT_OFFSET_TAU_H = 24     # 차이가 줄어드는 빠르기 (시간). 이만큼 지나면 남은 차이가 약 37%로 준다

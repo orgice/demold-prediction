@@ -41,7 +41,7 @@ const GROUPS: Group[] = [
     together: ["tempObserved", "tempAssumed"],
     rows: [
       { key: "tempObserved", name: "관측", help: "센서가 실제로 잰 내부온도", dash: "solid" },
-      { key: "tempAssumed", name: "가정", help: "마지막 데이터 이후, 직전 24시간이 반복된다고 가정한 온도", dash: "dash" },
+      { key: "tempAssumed", name: "가정", help: "마지막 데이터 이후, 기상청 예보(없으면 직전 24시간 반복)로 가정한 온도", dash: "dash" },
     ],
   },
 ];

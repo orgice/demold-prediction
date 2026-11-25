@@ -25,6 +25,9 @@ services:
     environment:
       DATABASE_URL: mysql+pymysql://demold:${DB_PASSWORD:-demold}@db:3306/demold?charset=utf8mb4
       KMA_SERVICE_KEY: ${KMA_SERVICE_KEY:-}   # webapp/.env 에서 읽음
+      FORECAST_NX: ${FORECAST_NX:-}           # 현장 단기예보 격자 (비우면 예보 안 씀)
+      FORECAST_NY: ${FORECAST_NY:-}
+      CLIMATE_STATION: ${CLIMATE_STATION:-}   # 평년 기온용 가까운 ASOS 관측소 번호
       GRAM_SENSORS: ${GRAM_SENSORS:-}
       HIDDEN_SENSORS: ${HIDDEN_SENSORS:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}

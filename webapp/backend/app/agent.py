@@ -107,7 +107,7 @@ def tool_get_prediction(s: Session, pour_id: int, as_of: str | None = None) -> d
             "observed_by_specimen": _fmt(m["observed"]),
         } for m in r["milestones"]],
         "note": "expected=예상 시각, conservative=90% 범위 하한 기준 보수적 시각. "
-                "미래 온도는 직전 24시간 패턴 반복 가정.",
+                f"미래 온도 가정: {r['model']['forecast']}.",
     }
 
 
