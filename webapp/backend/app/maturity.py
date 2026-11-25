@@ -325,6 +325,7 @@ def train(engine: Engine, pours: list, exclude_id: int | None):
 FORECAST_REPEAT = "직전 24시간 내부온도 반복"
 FORECAST_KMA = "기상청 단기예보 + 내부·외기 차이"
 FORECAST_OBS = "기상청 관측 기온(그때 예보 대신) + 내부·외기 차이"
+FORECAST_NORMAL = "평년 기온(그때 예보 대신) + 내부·외기 차이"
 
 
 def repeat_last_day(T_obs: pd.Series, until: datetime) -> pd.Series:
@@ -388,7 +389,8 @@ def forecast_temperature(T_obs: pd.Series, until: datetime, outside: pd.Series |
     hours = np.asarray((future - last) / timedelta(hours=1))
     off = AMBIENT_OFFSET_INF + (off_now - AMBIENT_OFFSET_INF) * np.exp(-hours / AMBIENT_OFFSET_TAU_H)
     T = amb.reindex(future) + off
-    return T.fillna(fallback), FORECAST_OBS if forecast.attrs.get("source") == "obs" else FORECAST_KMA
+    label = {"obs": FORECAST_OBS, "normal": FORECAST_NORMAL}.get(forecast.attrs.get("source"), FORECAST_KMA)
+    return T.fillna(fallback), label
 
 
 def first_crossing(series: pd.Series, thr: float):
