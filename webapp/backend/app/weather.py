@@ -100,7 +100,7 @@ def fetch_recent(hours: int = BACKFILL_H) -> int:
 def forecast_at(as_of: datetime) -> pd.Series | None:
     """기준 시각 as_of 에 알 수 있었던 가장 최근 예보 (예보 대상 시각 → 기온 ℃, 1시간 간격).
 
-    관측값으로 대신 채운 예보면 결과의 attrs["source"] 가 "obs" (아니면 "fcst").
+    결과의 attrs["source"]: "fcst" 진짜 예보, "obs"·"normal" 관측·평년 기온으로 대신 채운 것.
 
     as_of 보다 늦게 나온 예보는 쓰지 않는다 (그때는 몰랐으므로). FORECAST_MAX_AGE_H 보다 오래된 예보만 있으면 None.
     """
@@ -119,7 +119,7 @@ def forecast_at(as_of: datetime) -> pd.Series | None:
     if d.empty:
         return None
     s = d.set_index("fcst_time").temp
-    s.attrs["source"] = "obs" if (d.source == "obs").any() else "fcst"   # 관측값으로 대신 채운 예보인지
+    s.attrs["source"] = d.source.iloc[0]   # fcst(진짜 예보) / obs·normal(나중에 관측·평년 기온으로 대신 채움)
     return s
 
 
