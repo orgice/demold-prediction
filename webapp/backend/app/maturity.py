@@ -216,17 +216,48 @@ class PourData:
     specimens: pd.DataFrame  # 공시체 결과 표: 시험 시각, 재령(타설 후 며칠), 그때 적산온도(x), 강도(fc)
 
 
+_pour_data_cache: dict = {}   # 회차별 학습 데이터 (clear_cache 와 별개, 아래 열쇠가 같으면 다시 쓴다)
+
+
 def pour_data(engine: Engine, pour) -> PourData | None:
     """회차의 현장양생 공시체마다 '시험한 순간의 적산온도(x)'와 '실제 강도(fc)'를 짝지어 학습용 점을 만든다.
 
     수중양생 공시체(물속에서 표준 온도로 굳힌 것)는 현장 온도와 상관없으므로 쓰지 않는다.
     온도 기록이 끝난 뒤에 시험한 공시체도 그때의 적산온도를 알 수 없어서 뺀다.
     타설 시각이나 온도 기록이 없으면 None(쓸 수 없음).
+
+    빠르게 하려고 회차마다 결과를 기억해 둔다. 회차 하나를 예측할 때마다 '나머지 회차들'로 곡선을 다시
+    그리므로, 기억하지 않으면 목록 화면 한 번에 같은 회차의 30일치 온도를 수십 번 다시 읽는다.
+    타설 시각·센서·제외 구간·공시체 결과, 그리고 그 기간 센서 데이터의 지문(행 수·마지막 시각·온도 합)이
+    모두 같을 때만 다시 쓴다. 그래서 진행 중인 회차에 새 데이터가 들어와도, 끝난 회차는 다시 읽지 않는다.
     """
     if pour.start is None:
         return None
-    start = pour.start
-    T = pour_temperature(engine, pour, start, start + HORIZON + timedelta(days=2))
+    start, end = pour.start, pour.start + HORIZON + timedelta(days=2)
+    key = (pour.id, start, pour.sensors, tuple((e.start, e.end) for e in pour.exclusions),
+           tuple((t.id, t.test_datetime, t.curing, tuple(t.values)) for t in pour.tests),
+           _data_fingerprint(engine, pour.sensor_list, start, end))
+    if key in _pour_data_cache:
+        return _pour_data_cache[key]
+    if len(_pour_data_cache) > 500:   # 오래된 열쇠가 쌓이지 않게 가끔 비운다
+        _pour_data_cache.clear()
+    _pour_data_cache[key] = result = _build_pour_data(engine, pour, start, end)
+    return result
+
+
+def _data_fingerprint(engine: Engine, macs: list[str], start: datetime, end: datetime) -> tuple:
+    """그 기간 센서 데이터가 바뀌었는지 알아보는 가벼운 질의 (온도를 통째로 읽는 것보다 훨씬 빠르다)."""
+    if not macs:
+        return ()
+    q = text("SELECT COUNT(*), MAX(bucket), ROUND(SUM(temp_in), 3) FROM sensor_10min "
+             "WHERE mac IN :macs AND bucket >= :a AND bucket < :b").bindparams(bindparam("macs", expanding=True))
+    with engine.connect() as c:
+        return tuple(c.execute(q, {"macs": macs, "a": start, "b": end}).one())
+
+
+def _build_pour_data(engine: Engine, pour, start: datetime, end: datetime) -> PourData | None:
+    """pour_data 의 실제 계산 (DB에서 온도를 읽어 공시체 점을 만든다)."""
+    T = pour_temperature(engine, pour, start, end)
     T = T[T.index >= start]
     if T.dropna().empty:
         return None
