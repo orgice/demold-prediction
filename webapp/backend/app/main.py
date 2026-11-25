@@ -29,7 +29,7 @@ from .test_users import ensure_test_users
 from .config import CORS_ORIGINS
 from .db import Base, engine
 from .ingest import link_legacy_rows
-from . import delta_sync, notify
+from . import delta_sync, notify, weather
 from .routers import agent, audit, auth, delta, live, model, notify as notify_router, pours, sensors, users
 
 app = FastAPI(title="거푸집 탈형 시점 예측 API", version="0.1.0")
@@ -75,6 +75,7 @@ def create_tables():
     ensure_test_users()
     notify.start()   # SMTP 설정이 있으면 알림 메일 자동 발송 시작
     delta_sync.start()   # Delta Sharing 자격증명 파일이 있으면 센서 데이터 자동 수집 시작
+    weather.start()   # 기상청 키·현장 위치가 있으면 단기예보 수집·평년 기온 준비 (앞으로의 온도 가정)
 
 
 @app.get("/api/health")

@@ -91,6 +91,27 @@ class Sensor10min(Base):
     __table_args__ = (Index("ix_10min_bucket", "bucket"),)
 
 
+class WeatherForecast(Base):
+    """기상청 단기예보 기온 (weather.py). 받은 예보를 지우지 않고 쌓아 두어,
+    지난 기준 시각의 예측(최초 예상)을 그때 알던 예보로 다시 계산할 수 있게 한다."""
+    __tablename__ = "weather_forecast"
+    base_time: Mapped[datetime] = mapped_column(DateTime, primary_key=True)   # 예보 발표 시각 (KST)
+    fcst_time: Mapped[datetime] = mapped_column(DateTime, primary_key=True)   # 예보 대상 시각 (KST)
+    nx: Mapped[int] = mapped_column(Integer, primary_key=True)                # 예보 격자 좌표
+    ny: Mapped[int] = mapped_column(Integer, primary_key=True)
+    temp: Mapped[float] = mapped_column(Float)                                # 1시간 기온 (℃)
+
+
+class ClimateNormal(Base):
+    """평년 기온: 관측소의 지난 몇 년(CLIMATE_YEARS) 같은 날·같은 시각 기온 평균 (앞뒤 7일로 고르게 폄).
+    예보가 끝난 뒤(약 4일 이후)의 기온을 채우는 데 쓴다 (weather.py)."""
+    __tablename__ = "climate_normal"
+    station: Mapped[int] = mapped_column(Integer, primary_key=True)   # ASOS 관측소 번호
+    doy: Mapped[int] = mapped_column(Integer, primary_key=True)       # 1월 1일 = 1 ~ 12월 31일 = 365 (2월 29일은 28일로 봄)
+    hour: Mapped[int] = mapped_column(Integer, primary_key=True)      # 0~23시
+    temp: Mapped[float] = mapped_column(Float)
+
+
 class SensorMeta(Base):
     """센서별 화면 설정: 표시 이름, 목록에서 숨김. 측정 데이터와 회차 예측에는 영향이 없다."""
     __tablename__ = "sensor_meta"

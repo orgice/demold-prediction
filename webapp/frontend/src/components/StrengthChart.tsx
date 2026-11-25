@@ -52,11 +52,11 @@ export function isComplete(pred: Prediction) {
 const LEGEND_HELP: Record<string, string> = {
   "최초 예측": "타설 후 24시간까지의 데이터로 했던 예측입니다. 지금 예측과 비교해 도달이 늦어졌는지 빨라졌는지 봅니다.",
   "실측 기반 추정": "센서가 실제로 잰 내부온도로 계산한 강도입니다. 마지막 데이터 시점까지 그립니다.",
-  "수정 예측": "마지막 데이터 이후의 예측입니다. 직전 24시간 온도가 반복된다고 가정하고, 공시체 결과가 있으면 보정해 이어 그립니다.",
+  "수정 예측": "마지막 데이터 이후의 예측입니다. 기상청 예보(없으면 직전 24시간 반복)로 온도를 가정하고, 공시체 결과가 있으면 보정해 이어 그립니다.",
   "목표 강도": "회차 설정에 따른 해체 기준(벽·기둥 측면 5 MPa부터, 슬래브 밑면 14 MPa부터)과 입력한 설계기준강도입니다.",
   "공시체": "현장에서 깬 압축강도 시험 1회의 평균값입니다. 예측이 맞는지 확인하는 실측점입니다.",
   "관측": "센서가 실제로 잰 콘크리트 내부온도입니다.",
-  "가정": "마지막 데이터 이후 온도입니다. 직전 24시간 패턴이 반복된다고 가정했습니다.",
+  "가정": "마지막 데이터 이후 온도입니다. 기상청 예보 기온에 콘크리트·외기 온도 차이를 더해 가정했습니다 (예보가 없으면 직전 24시간 반복).",
 };
 const legendTip = {
   show: true,
@@ -204,7 +204,7 @@ export function CompareStrengthChart({ items, height = 400 }: { items: CompareIt
   return <Chart option={option} height={height} />;
 }
 
-/** 회차 하나의 내부온도: 실선 = 관측, 점선 = 가정 (직전 24시간 반복) */
+/** 회차 하나의 내부온도: 실선 = 관측, 점선 = 가정 (기상청 예보, 없으면 직전 24시간 반복) */
 export function TempChart({ pred, height = 220, compact = false }: { pred: Prediction; height?: number; compact?: boolean }) {
   const LINE = useLineColors();
   const narrow = useNarrow() && !compact;

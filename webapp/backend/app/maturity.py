@@ -42,9 +42,10 @@
   정확도에 가장 크게 영향을 주는 단계다. 공시체 결과는 나오는 대로 바로 입력할수록 좋다.
 
 4단계. 앞으로의 온도 가정
-  아직 오지 않은 시간의 온도는 알 수 없으므로 "직전 24시간 온도가 그대로 반복된다"고 본다.
-  날씨가 갑자기 추워지거나 더워지면 이 가정이 틀려 예측이 어긋나고,
-  새 온도 데이터가 들어오면 다시 계산되며 따라잡는다.
+  아직 오지 않은 시간의 온도는 기상청 단기예보(약 4일, 그 뒤는 평년 기온)로 외기를 정하고,
+  "콘크리트는 외기보다 조금 따뜻하고, 그 차이는 하루쯤 지나며 줄어든다"고 보정해 내부온도를 가정한다.
+  예보를 쓸 수 없으면(설정 없음, 그 시각의 예보 없음) "직전 24시간 온도가 그대로 반복된다"고 본다.
+  예보가 틀리면 예측도 어긋나지만, 새 온도 데이터·새 예보가 들어오면 다시 계산되며 따라잡는다.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 '예상' 시각과 '보수적' 시각
@@ -91,8 +92,9 @@ from scipy.optimize import curve_fit
 from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
-from . import criteria
-from .config import BASELINE_HOURS, CALIBRATION_MAX_AGE_DAY, DATUM_TEMP, FIXED_CURVE, FIXED_CURVE_SIGMA, THRESHOLDS
+from . import criteria, weather
+from .config import (AMBIENT_OFFSET_INF, AMBIENT_OFFSET_TAU_H, BASELINE_HOURS, CALIBRATION_MAX_AGE_DAY, DATUM_TEMP,
+                     FIXED_CURVE, FIXED_CURVE_SIGMA, THRESHOLDS)
 
 STEP = timedelta(minutes=10)     # 계산 간격: 10분마다 한 번씩 계산 (센서 데이터도 10분 단위로 정리돼 있음)
 HORIZON = timedelta(days=30)     # 타설 후 30일까지 계산·그래프 표시 (28일 공시체를 하루쯤 늦게 깨도 보이도록)
@@ -108,22 +110,24 @@ class PredictionError(ValueError):
 
 
 # ━━━━━━━━━━ 온도 · 적산온도 (1단계) ━━━━━━━━━━
-def temperature(engine: Engine, macs: list[str], start: datetime, end: datetime) -> pd.Series:
+def temperature(engine: Engine, macs: list[str], start: datetime, end: datetime, column: str = "temp_in") -> pd.Series:
     """센서들이 잰 온도를 10분 간격으로 가져온다.
 
-    - 구조물 내부온도(temp_in)만 쓴다.
+    - 적산온도에는 구조물 내부온도(temp_in)만 쓴다. 외기온도(temp_out)는 앞으로의 온도를 가정할 때
+      '내부 − 외기' 차이를 재는 데만 쓴다 (forecast_temperature).
     - macs: 센서 이름(MAC 주소) 목록. 한 회차에 센서가 여러 개면 같은 시각 값을 평균 낸다.
     - 6시간 이내의 짧은 빈 구간(센서 일시 끊김)은 앞뒤 값을 직선으로 이어 채운다.
       그보다 긴 공백은 그대로 비워 둔다 (모르는 값을 지어내지 않기 위해).
     """
     if not macs:
         return pd.Series(dtype=float)
-    q = text("SELECT bucket, temp_in FROM sensor_10min "
+    assert column in ("temp_in", "temp_out")
+    q = text(f"SELECT bucket, {column} AS v FROM sensor_10min "
              "WHERE mac IN :macs AND bucket >= :a AND bucket < :b").bindparams(bindparam("macs", expanding=True))
     d = pd.read_sql(q, engine, params={"macs": macs, "a": start, "b": end})
     if d.empty:
         return pd.Series(dtype=float)
-    t = d.groupby("bucket").temp_in.mean()   # 같은 10분 칸의 여러 센서 값을 평균
+    t = d.groupby("bucket").v.mean()   # 같은 10분 칸의 여러 센서 값을 평균
     t = t.reindex(pd.date_range(t.index.min(), t.index.max(), freq=STEP))   # 빠진 10분 칸도 자리를 만든다
     return t.interpolate(limit=36, limit_area="inside")  # 36칸 = 6시간 이내 공백만 직선으로 채움
 
@@ -318,11 +322,14 @@ def train(engine: Engine, pours: list, exclude_id: int | None):
 
 
 # ━━━━━━━━━━ 예측 ━━━━━━━━━━
-def forecast_temperature(T_obs: pd.Series, until: datetime) -> pd.Series:
-    """앞으로의 온도 가정 (4단계): 직전 24시간 온도를 그대로 반복해 이어 붙인다.
+FORECAST_REPEAT = "직전 24시간 내부온도 반복"
+FORECAST_KMA = "기상청 단기예보 + 내부·외기 차이"
+
+
+def repeat_last_day(T_obs: pd.Series, until: datetime) -> pd.Series:
+    """직전 24시간 온도를 그대로 반복해 이어 붙인다 (예보를 쓸 수 없을 때의 가정).
 
     직전 기록이 6시간도 안 되면 하루 패턴을 알 수 없으므로 지금까지의 평균 온도로 채운다.
-    기상 예보는 쓰지 않는다. 그래서 날씨가 갑자기 바뀌면 이 부분이 틀린다.
     """
     T_obs = T_obs.dropna()
     last = T_obs.index.max()
@@ -334,6 +341,53 @@ def forecast_temperature(T_obs: pd.Series, until: datetime) -> pd.Series:
         return pd.Series(T_obs.mean(), index=future)
     pattern = recent.values
     return pd.Series(np.resize(pattern, len(future)), index=future)   # 24시간 패턴을 이어 붙여 늘린다
+
+
+def forecast_temperature(T_obs: pd.Series, until: datetime, outside: pd.Series | None = None,
+                         forecast: pd.Series | None = None, normal=None) -> tuple[pd.Series, str]:
+    """앞으로의 온도 가정 (4단계). (10분 간격 온도, 쓴 방법 이름)을 돌려준다.
+
+    예보가 있으면:  내부온도 = 외기 + 차이
+      - 외기: 기상청 단기예보(약 4일), 그 뒤는 평년 기온(normal). 평년 기온이 없으면 예보 마지막 하루 반복.
+      - 차이: 직전 24시간의 '센서 내부 − 센서 외기' 평균에서 시작해, 하루쯤에 걸쳐 장기 차이(0.6℃)로 줄어든다.
+        타설 직후에는 시멘트가 굳으며 열을 내서 내부가 외기보다 3~6℃ 높고, 며칠 뒤에는 거의 같아지기 때문.
+    예보가 없으면(설정 없음, 지난 기준 시각이라 그때 받은 예보가 없음, 외기 센서 값 없음):
+      직전 24시간 내부온도를 그대로 반복한다 (repeat_last_day).
+
+    2026년 회차 백테스트(미래 외기에 기상청 실측 기온을 넣어 비교): 해체 기준 도달 시각 오차가
+    직전 24시간 반복 13시간 → 예보 4일 + 평년 기온 2시간. 반복 방식은 타설 첫날 열 때문에 이르게 예측했다.
+    """
+    fallback = repeat_last_day(T_obs, until)
+    if fallback.empty or forecast is None or forecast.empty or outside is None:
+        return fallback, FORECAST_REPEAT
+    T_obs = T_obs.dropna()
+    last = T_obs.index.max()
+    future = fallback.index
+    # 지금의 '내부 − 외기' 차이 (직전 24시간 평균). 외기 센서 값이 6시간치도 없으면 예보를 쓰지 않는다
+    recent = T_obs[T_obs.index > last - timedelta(hours=24)]
+    diff = (recent - outside.reindex(recent.index)).dropna()
+    if len(diff) < 36:
+        return fallback, FORECAST_REPEAT
+    off_now = float(diff.mean())
+    # 외기: 지금 센서 외기 → 예보(1시간 간격)를 10분 간격으로 직선 연결
+    f = forecast[(forecast.index > last) & (forecast.index <= pd.Timestamp(until) + timedelta(hours=1))]
+    if f.empty:
+        return fallback, FORECAST_REPEAT
+    now_out = outside.dropna()
+    knots = f if now_out.empty else pd.concat([pd.Series([now_out.iloc[-1]], index=[last]), f])
+    grid = future[future <= f.index.max()]
+    amb = knots.reindex(knots.index.union(grid)).interpolate(method="time").reindex(grid)
+    rest = future[future > f.index.max()]
+    if len(rest):   # 예보가 끝난 뒤: 평년 기온, 없으면 예보 마지막 하루 반복
+        r = normal(rest) if normal else None
+        if r is None:
+            tail = amb[amb.index > amb.index.max() - timedelta(hours=24)].values
+            r = pd.Series(np.resize(tail, len(rest)), index=rest)
+        amb = pd.concat([amb, r])
+    hours = np.asarray((future - last) / timedelta(hours=1))
+    off = AMBIENT_OFFSET_INF + (off_now - AMBIENT_OFFSET_INF) * np.exp(-hours / AMBIENT_OFFSET_TAU_H)
+    T = amb.reindex(future) + off
+    return T.fillna(fallback), FORECAST_KMA
 
 
 def first_crossing(series: pd.Series, thr: float):
@@ -383,7 +437,7 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
     start = pour.start
     end = start + HORIZON
 
-    # 2) 온도: 기준 시각까지는 센서 기록, 그 뒤는 직전 24시간 반복으로 가정
+    # 2) 온도: 기준 시각까지는 센서 기록, 그 뒤는 기상청 예보(없으면 직전 24시간 반복)로 가정
     T_all = pour_temperature(engine, pour, start, end + STEP)
     T_all = T_all[T_all.index >= start]
     if T_all.dropna().empty:
@@ -393,7 +447,12 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
     as_of = max(as_of, pd.Timestamp(start) + STEP)                       # 타설 전으로도 못 감
 
     T_obs = T_all[T_all.index <= as_of]
-    T = pd.concat([T_obs, forecast_temperature(T_obs, end)])
+    fc = weather.forecast_at(as_of)   # 기준 시각에 알 수 있던 예보 (없으면 None → 직전 24시간 반복)
+    outside = None
+    if fc is not None:
+        outside = temperature(engine, pour.sensor_list, as_of - timedelta(hours=24), as_of + STEP, column="temp_out")
+    T_future, forecast_method = forecast_temperature(T_obs, end, outside, fc, weather.normal)
+    T = pd.concat([T_obs, T_future]) if not T_future.empty else T_obs
     # 3) 적산온도
     M = maturity(T)
 
@@ -488,7 +547,7 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
             "train_pours": model["pour_ids"],
             "train_specimens": model["n_specimens"],
             "fixed_curve": model["fixed"],
-            "forecast": "기준 시각 이후 온도는 직전 24시간 패턴 반복으로 가정",
+            "forecast": forecast_method,   # 기준 시각 이후 온도를 무엇으로 가정했는지
         },
     }
 
