@@ -45,6 +45,12 @@ SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "FormCast").strip()
 NOTIFY_INTERVAL_MIN = float(os.environ.get("NOTIFY_INTERVAL_MIN", "10") or 10)   # 몇 분마다 알림을 확인할지
 APP_URL = os.environ.get("APP_URL", "").strip() or "http://localhost:8080"   # 메일의 '자세히 보기' 링크 주소
 
+# ---- 장애 알림 (health.py): 자동 수집·예보 받기가 계속 실패하면 메일 ----
+# 받을 주소 (쉼표 구분). 비우면 보내는 주소(SMTP_FROM)로 보낸다. SMTP 설정이 없으면 로그만 남긴다
+ALERT_EMAILS = [a.strip() for a in os.environ.get("ALERT_EMAILS", "").split(",") if a.strip()]
+ALERT_AFTER_MIN = 60   # 처음 실패한 뒤 이만큼(분) 계속 실패하면 알린다 (잠깐의 오류로 메일이 쏟아지지 않게)
+ALERT_REPEAT_H = 24    # 고쳐지지 않으면 이 간격(시간)으로 다시 알린다
+
 # ---- 센서 데이터 자동 수집 (delta_sync.py, Databricks Delta Sharing) ----
 # 협력사가 보낸 자격증명 파일(config.share) 위치. 파일이 없거나 비어 있으면 자동 수집은 꺼진다
 # Docker 에서는 webapp/.env 의 DELTA_SHARE_FILE(내 컴퓨터 경로)을 이 위치로 읽기 전용 연결한다 (docker-compose.yml)
