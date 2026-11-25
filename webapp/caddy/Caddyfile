@@ -6,6 +6,19 @@
 # http:// 로 들어오면 https:// 로 자동으로 보낸다.
 {$SITE_ADDRESS:localhost} {
 	encode gzip
-	header Strict-Transport-Security "max-age=31536000"
-	reverse_proxy frontend:80
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		# 다른 사이트가 이 화면을 iframe 으로 몰래 띄우지 못하게 (클릭재킹 방지)
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		# 파일 종류를 브라우저가 멋대로 추측하지 않게
+		X-Content-Type-Options "nosniff"
+		# 다른 사이트로 이동할 때 주소의 경로·쿼리는 보내지 않음
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# 서버 프로그램 이름·버전을 알리지 않음
+		-Server
+	}
+	reverse_proxy frontend:80 {
+		header_down -Server
+	}
 }

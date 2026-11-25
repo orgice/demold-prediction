@@ -5,6 +5,7 @@ services:
   # 데이터베이스 (MariaDB). 데이터는 db-data 볼륨에 저장돼 컨테이너를 꺼도 남는다
   db:
     image: mariadb:11.4
+    restart: unless-stopped   # 서버 재부팅·오류로 꺼져도 다시 켠다 (docker compose stop 으로 끈 것은 그대로)
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-demold-root}
       MARIADB_DATABASE: demold
@@ -22,6 +23,7 @@ services:
   # 백엔드 API 서버 (FastAPI, :8000). backend/Dockerfile로 이미지를 만든다
   backend:
     build: ./backend
+    restart: unless-stopped   # 서버 재부팅·오류로 꺼져도 다시 켠다 (docker compose stop 으로 끈 것은 그대로)
     environment:
       DATABASE_URL: mysql+pymysql://demold:${DB_PASSWORD:-demold}@db:3306/demold?charset=utf8mb4
       KMA_SERVICE_KEY: ${KMA_SERVICE_KEY:-}   # webapp/.env 에서 읽음
@@ -63,6 +65,7 @@ services:
   # 웹 화면 (React + nginx, :8080). /api 요청은 backend로 넘긴다 (frontend/nginx.conf)
   frontend:
     build: ./frontend
+    restart: unless-stopped   # 서버 재부팅·오류로 꺼져도 다시 켠다 (docker compose stop 으로 끈 것은 그대로)
     depends_on: [backend]
     ports: ["8080:80"]
 
@@ -70,6 +73,7 @@ services:
   # 443(HTTPS)으로 받아 frontend 로 넘긴다. 인증서는 자동 발급·갱신 (caddy/Caddyfile, .env 의 SITE_ADDRESS)
   caddy:
     image: caddy:2.8
+    restart: unless-stopped   # 서버 재부팅·오류로 꺼져도 다시 켠다 (docker compose stop 으로 끈 것은 그대로)
     profiles: [https]
     depends_on: [frontend]
     environment:
