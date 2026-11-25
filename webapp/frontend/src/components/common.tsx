@@ -1,5 +1,5 @@
 // 여러 화면에서 같이 쓰는 작은 부품들 (데이터 불러오기, 오류·로딩 표시, 창, 해체 시각 표시).
-import { DependencyList, ReactNode, useCallback, useEffect, useState } from "react";
+import { DependencyList, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { Member, Milestone } from "../api/client";
 import { fmtAge, fmtDateTime } from "../format";
 
@@ -49,9 +49,21 @@ export function Loading({ text = "불러오는 중…" }: { text?: string }) {
  * align: 화면 오른쪽 끝 근처면 "left", 왼쪽 끝 근처면 "right" (말풍선이 잘리지 않게)
  */
 export function Info({ children, align }: { children: ReactNode; align?: "left" | "right" }) {
+  // 평소엔 아이콘 위에 띄우고, 위쪽 공간(고정 메뉴바 아래)이 모자라면 아래에 띄운다 (말풍선이 잘리지 않게)
+  const tip = useRef<HTMLSpanElement>(null);
+  const [below, setBelow] = useState(false);
+  const place = () => {
+    const el = tip.current;
+    const dot = el?.parentElement;
+    if (!el || !dot) return;
+    const bar = document.querySelector(".topbar");
+    const barBottom = bar && getComputedStyle(bar).position === "sticky" ? bar.getBoundingClientRect().bottom : 0;
+    setBelow(dot.getBoundingClientRect().top - el.offsetHeight - 8 < barBottom);
+  };
   return (
-    <span className={`info-dot ${align ?? ""}`} tabIndex={0} aria-label="설명 보기">
-      i<span className="info-tip" role="tooltip">{children}</span>
+    <span className={`info-dot ${align ?? ""} ${below ? "below" : ""}`} tabIndex={0} aria-label="설명 보기"
+          onMouseEnter={place} onFocus={place}>
+      i<span className="info-tip" role="tooltip" ref={tip}>{children}</span>
     </span>
   );
 }
