@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { authApi, Role, User } from "../api/auth";
 import { ROLE_INFO, ROLE_ORDER } from "../auth/roles";
-import { ErrorBox, Modal } from "./common";
+import { ErrorBox, Modal, PasswordInput } from "./common";
 
 /** Esc 키로 창 닫기 (작업 중이면 무시 — 취소 버튼과 같은 조건) */
 function useEscClose(onClose: () => void, busy: boolean) {
@@ -114,13 +114,13 @@ export function UserFormModal({ user, meId, onClose, onDone }: {
           <div className="form-row top">
             <label className="field">
               <span className="sr-only">{editing ? "새 비밀번호" : "초기 비밀번호"}</span>
-              <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="8자 이상"
+              <PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} placeholder="8자 이상"
                 autoComplete="new-password" disabled={busy} aria-invalid={!!show("pw")} />
               {show("pw") && <span className="tiny text-warn">{show("pw")}</span>}
             </label>
             <label className="field">
               <span className="sr-only">비밀번호 확인</span>
-              <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder="한 번 더 입력"
+              <PasswordInput value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder="한 번 더 입력"
                 autoComplete="new-password" disabled={busy} aria-invalid={!!show("pw2")} />
               {show("pw2") && <span className="tiny text-warn">{show("pw2")}</span>}
             </label>

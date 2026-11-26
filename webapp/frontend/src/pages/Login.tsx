@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { PasswordInput } from "../components/common";
 
 export default function Login() {
   const { user, ready, login } = useAuth();
@@ -47,7 +48,7 @@ export default function Login() {
           {touched && idEmpty && <span className="tiny text-warn">ID를 입력해 주세요.</span>}
         </label>
         <label className="field">비밀번호
-          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password"
+          <PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password"
             disabled={busy} aria-invalid={touched && pwEmpty} />
           {touched && pwEmpty && <span className="tiny text-warn">비밀번호를 입력해 주세요.</span>}
         </label>

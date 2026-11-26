@@ -1,5 +1,5 @@
 // 여러 화면에서 같이 쓰는 작은 부품들 (데이터 불러오기, 오류·로딩 표시, 창, 해체 시각 표시).
-import { DependencyList, ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { DependencyList, InputHTMLAttributes, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { Member, Milestone } from "../api/client";
 import { fmtAge, fmtDateTime } from "../format";
 
@@ -127,5 +127,26 @@ export function MilestoneRow({ m, baseAgeH }: { m: Milestone; baseAgeH?: number 
         {delay && <div className="tiny">{delay}</div>}
       </div>
     </div>
+  );
+}
+
+const EYE = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>;
+const EYE_OFF = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.7 3.6M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /><path d="M3 3l18 18" /></svg>;
+
+/**
+ * 비밀번호 입력칸. 오른쪽 눈 아이콘을 누르면 입력한 글자를 보이거나 다시 가린다 (기본은 가림).
+ * type 을 빼고는 일반 <input> 과 같은 속성을 받는다.
+ */
+export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [visible, setVisible] = useState(false);
+  const label = visible ? "비밀번호 숨기기" : "비밀번호 보기";
+  return (
+    <span className="pw-wrap">
+      <input {...props} type={visible ? "text" : "password"} />
+      <button type="button" className="pw-toggle" onClick={() => setVisible((v) => !v)}
+        aria-label={label} aria-pressed={visible} title={label} disabled={props.disabled}>
+        {visible ? EYE_OFF : EYE}
+      </button>
+    </span>
   );
 }
