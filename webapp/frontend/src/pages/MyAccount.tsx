@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { authApi } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
+import { PasswordInput } from "../components/common";
 import { ROLE_INFO } from "../auth/roles";
 import GraphColorSettings from "../components/GraphColorSettings";
 
@@ -98,12 +99,12 @@ export default function MyAccount() {
         <h3 className="mt-2">비밀번호 변경</h3>
         <div className="form-row top">
           <label className="field">새 비밀번호
-            <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="바꾸지 않으려면 비워 두세요"
+            <PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} placeholder="바꾸지 않으려면 비워 두세요"
               autoComplete="new-password" disabled={busy} aria-invalid={!!show("pw")} />
             {show("pw") ? <span className="tiny text-warn">{show("pw")}</span> : <span className="tiny">8자 이상</span>}
           </label>
           <label className="field">새 비밀번호 확인
-            <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder="한 번 더 입력"
+            <PasswordInput value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder="한 번 더 입력"
               autoComplete="new-password" disabled={busy || !pwChanged} aria-invalid={!!show("pw2")} />
             {show("pw2") && <span className="tiny text-warn">{show("pw2")}</span>}
           </label>
@@ -111,7 +112,7 @@ export default function MyAccount() {
 
         {needCur && (
           <label className="field account-cur">현재 비밀번호
-            <input type="password" value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="current-password"
+            <PasswordInput value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="current-password"
               disabled={busy} aria-invalid={!!show("cur")} />
             {show("cur") ? <span className="tiny text-warn">{show("cur")}</span>
               : <span className="tiny">ID나 비밀번호를 바꾸려면 본인 확인이 필요해요.</span>}

@@ -480,6 +480,17 @@ tbody tr:hover { background: var(--hover); }
 .btn.danger-fill:disabled:hover { background: var(--bad); }
 
 .check-line { font-weight: 400; color: var(--text); cursor: pointer; gap: 6px; }
+/* 비밀번호 입력칸 + 보기/숨기기 눈 아이콘 (components/common.tsx PasswordInput) */
+.pw-wrap { position: relative; display: block; }
+.pw-wrap input { width: 100%; padding-right: 40px; }
+.pw-toggle { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; border: none; border-radius: var(--radius-m); background: transparent; color: var(--text-3); cursor: pointer; }
+.pw-toggle:hover { background: var(--hover); color: var(--text); }
+.pw-toggle:disabled { cursor: default; opacity: 0.5; background: transparent; }
+@media (max-width: 640px) {
+  .pw-wrap input { padding-right: 48px; }
+  .pw-toggle { width: 40px; height: 40px; }
+}
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .user-table td { vertical-align: middle; }
