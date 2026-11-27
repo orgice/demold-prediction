@@ -57,6 +57,7 @@ class PourIn(BaseModel):
     """새 타설 회차 등록."""
     name: str
     site: str | None = None                          # 현장 이름
+    region_code: str | None = None                   # 현장 위치 (시·군·구 코드, regions.py)
     pour_start: datetime | None = None               # 확정된 타설 시작 (모르면 비움 → 자동 추정)
     pour_end: datetime | None = None
     design_strength: float | None = Field(None, gt=0, le=200)   # 설계기준강도(MPa), 배합표 값
@@ -74,6 +75,7 @@ class PourPatch(BaseModel):
     """회차 정보 수정. 보낸 항목만 바뀐다."""
     name: str | None = None
     site: str | None = None
+    region_code: str | None = None
     pour_start: datetime | None = None
     pour_end: datetime | None = None
     design_strength: float | None = Field(None, gt=0, le=200)
@@ -118,6 +120,8 @@ class PourOut(BaseModel):
     id: int
     name: str
     site: str | None
+    region_code: str | None = None
+    region_name: str | None = None              # 현장 위치 이름 (예: 서울특별시 종로구)
     pour_start: datetime | None
     pour_end: datetime | None
     detected_start: datetime | None

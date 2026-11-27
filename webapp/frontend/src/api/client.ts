@@ -7,6 +7,8 @@ export interface Pour {
   id: number;
   name: string;
   site: string | null;
+  region_code?: string | null;      // 현장 위치 (시·군·구 코드). 이 위치의 기상청 예보로 앞으로의 온도를 가정
+  region_name?: string | null;      // 현장 위치 이름 (예: 서울특별시 종로구)
   pour_start: string | null;
   pour_end: string | null;
   detected_start: string | null;
@@ -23,6 +25,14 @@ export interface Pour {
   test_count: number;
   notify_emails?: string | null;    // 알림 메일 받을 주소 (쉼표 구분)
   notice?: Notice | null;           // 마지막으로 보낸 알림 (없으면 아직 안 보냄)
+}
+
+/** 현장 위치로 고를 수 있는 시·군·구 (station_name: 평년 기온에 쓰는 가까운 기상 관측소) */
+export interface Region {
+  code: string;
+  sido: string;
+  name: string;
+  station_name: string;
 }
 
 /** 보낸 알림 기록: 마지막으로 보낸 시각, 그때의 기준별 예상 시각(키: Milestone.key, 예전 기록은 "5"·"14"), 알림 키별 보낸 시각 */
@@ -276,6 +286,7 @@ export const api = {
   pours: () => request<Pour[]>("/api/pours"),
   summary: () => request<PourSummary[]>("/api/pours/summary"),
   pour: (id: number) => request<Pour>(`/api/pours/${id}`),
+  regions: () => request<Region[]>("/api/pours/regions"),
   createPour: (body: Partial<Pour>) => request<Pour>("/api/pours", json("POST", body)),
   updatePour: (id: number, body: Partial<Pour>) => request<Pour>(`/api/pours/${id}`, json("PATCH", body)),
   /** 이 회차의 변경 기록 (편집 권한 이상) */

@@ -1,5 +1,5 @@
 // [회차 상세 › 설정 탭] 화면설계서 12쪽, 수행계획서 '센서와 타설 연결'·'데이터 상태 확인'
-//   ① 기본 정보 (이름·현장·부재 종류·설계기준강도·해체 기준·알림 받을 메일·메모)
+//   ① 기본 정보 (이름·현장·현장 위치·부재 종류·설계기준강도·해체 기준·알림 받을 메일·메모)
 //      해체 기준: 조건(구조 형식·내구성)으로 자동 계산, 예외로 직접 입력(KCS 최소값 이상 + 사유). 서버 criteria.py 가 최종 계산
 //   ② 연결 센서 선택·변경 → 이 회차 예측에 쓸 센서
 //   ③ CSV 데이터: 후속 데이터 추가 (중복 행은 건너뜀) + 이 회차 기간과 겹치는 업로드의 이름 변경·삭제 (⚠ 이름 변경·삭제는 목업)
@@ -8,7 +8,7 @@
 //   ⑥ 회차 삭제 (공시체 결과와 제외 구간은 함께 삭제, 센서 데이터는 남음)
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, Member, MEMBER_LABEL, Pour, Structure, STRUCTURE_LABEL, UploadLog, UploadResult } from "../api/client";
+import { api, Member, MEMBER_LABEL, Pour, Region, Structure, STRUCTURE_LABEL, UploadLog, UploadResult } from "../api/client";
 import { uploadName, uploadsApi, UPLOADS_IS_MOCK } from "../api/uploads";
 import { PourHistory } from "../components/ChangeHistory";
 import { ErrorBox, Info, Loading, Modal, useAsync } from "../components/common";
@@ -19,7 +19,7 @@ const REASONS = ["탈형 작업", "센서 이상", "거푸집 설치 충격", "�
 
 /** 저장된 회차 값으로 채운 입력 칸 (처음 열 때·취소할 때) */
 const initForm = (pour: Pour) => ({
-  name: pour.name, site: pour.site ?? "", design: pour.design_strength?.toString() ?? "",
+  name: pour.name, site: pour.site ?? "", region: pour.region_code ?? "", design: pour.design_strength?.toString() ?? "",
   note: pour.note ?? "", member: (pour.member ?? "") as Member | "", emails: pour.notify_emails ?? "",
   structure: (pour.structure ?? "") as Structure | "", durable: !!pour.durable,
   overrideOn: pour.removal_override != null, override: pour.removal_override?.toString() ?? "",
@@ -29,6 +29,7 @@ const initForm = (pour: Pour) => ({
 export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: () => void }) {
   const nav = useNavigate();
   const sensors = useAsync(api.sensors, []);
+  const regions = useAsync(api.regions, []);
   const [f, setF] = useState(() => initForm(pour));
   const [macs, setMacs] = useState<string[]>(pour.sensors);
   const [msg, setMsg] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
     }
     try {
       const saved = await api.updatePour(pour.id, {
-        name: f.name.trim(), site: f.site || null, note: f.note || null,
+        name: f.name.trim(), site: f.site || null, region_code: f.region || null, note: f.note || null,
         design_strength: f.design ? Number(f.design) : null, member: f.member || null, sensors: macs,
         notify_emails: f.emails.trim() || null,
         structure: f.structure || null, durable: f.durable,
@@ -76,6 +77,19 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
         <div className="form-row">
           <label className="field">이름<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
           <label className="field">현장<input value={f.site} onChange={(e) => setF({ ...f, site: e.target.value })} /></label>
+        </div>
+        <div className="form-row">
+          <div />
+          <label className="field">
+            <span>현장 위치<Info align="right">앞으로의 콘크리트 온도를 이 위치의 기상청 단기예보(약 4일)와 가까운 관측소의 평년 기온으로 가정합니다. 고르지 않으면 서버 기본 위치를 씁니다.</Info></span>
+            <RegionSelect regions={regions.data ?? []} value={f.region} onChange={(region) => setF({ ...f, region })} />
+            {(() => {
+              const r = regions.data?.find((x) => x.code === f.region);
+              return <span className="tiny">{r ? `날씨: ${r.name} 예보 · ${r.station_name} 관측소 평년 기온` : "고르지 않으면 서버 기본 위치의 날씨를 씁니다."}</span>;
+            })()}
+          </label>
+        </div>
+        <div className="form-row">
           <label className="field">부재 종류
             <select value={f.member} onChange={(e) => setF({ ...f, member: e.target.value as Member | "" })}>
               <option value="">미지정</option>
@@ -406,5 +420,21 @@ function Exclusions({ pour, onChanged }: { pour: Pour; onChanged: () => void }) 
         </div>
       ) : list.data && <div className="tiny">제외한 구간이 없습니다.</div>}
     </div>
+  );
+}
+
+/** 현장 위치 선택: 시·도별로 묶은 시·군·구 목록 */
+function RegionSelect({ regions, value, onChange }: { regions: Region[]; value: string; onChange: (code: string) => void }) {
+  const groups = new Map<string, Region[]>();
+  regions.forEach((r) => groups.set(r.sido, [...(groups.get(r.sido) ?? []), r]));
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">미지정 (서버 기본 위치)</option>
+      {[...groups].map(([sido, rs]) => (
+        <optgroup key={sido} label={sido}>
+          {rs.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
+        </optgroup>
+      ))}
+    </select>
   );
 }
