@@ -368,6 +368,55 @@ function PrevPicker({ previous, picked, onChange }: { previous: Pour[]; picked: 
   );
 }
 
+const GEAR = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);
+
+/** 강도 알림 설정 바로가기 (톱니바퀴). 받는 사람은 회차 설정에서 정한다.
+ *  선택한 회차가 하나면 그 회차 설정으로 바로, 여러 개면 회차를 고르는 작은 목록을 연다 */
+function AlertSettingsButton({ pours }: { pours: Pour[] }) {
+  const nav = useNavigate();
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => { if (!boxRef.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); btnRef.current?.focus(); } };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  if (pours.length === 0) return null;
+  const go = (p: Pour) => nav(`/pours/${p.id}?tab=settings`);
+  return (
+    <div className="picker" ref={boxRef}>
+      <button ref={btnRef} className={`icon-btn ${open ? "on" : ""}`} aria-expanded={pours.length > 1 ? open : undefined}
+        aria-label="알림 설정 (회차 설정에서 받는 사람 지정)" title="알림 설정 (받는 사람은 회차 설정에서 정합니다)"
+        onClick={() => (pours.length === 1 ? go(pours[0]) : setOpen((o) => !o))}>
+        {GEAR}
+      </button>
+      {open && (
+        <div className="picker-pop right">
+          <div className="tiny">알림 받을 메일을 정할 회차</div>
+          <div className="picker-list">
+            {pours.map((p) => (
+              <button key={p.id} className="picker-item plain" onClick={() => go(p)}>
+                <span />
+                <span>{title(p)}</span>
+                <span className="tiny">{p.notify_emails ? "받는 사람 있음" : "미설정"}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------- 회차 요약 ----------------
 type Item = { pour: Pour; state: PredState; retry?: () => void };
 /** 예측 강도·보정 카드의 접힘 상태 (모든 회차 카드가 함께 쓴다) */
@@ -591,7 +640,7 @@ function Separate({ items, colorOf, demo, kpi }: { items: Item[]; colorOf: (id: 
 
 // ---------------- 강도 알림 ----------------
 // 알림 종류·조건·메일 초안 내용은 components/alerts.ts 에 있다
-interface Alerts { list: AlertItem[]; failed: Pour[]; selected: number; unsent: number }
+interface Alerts { list: AlertItem[]; failed: Pour[]; pours: Pour[]; selected: number; unsent: number }
 
 /** 알림 대상: 선택한 회차. 아직 메일 초안을 열지 않은 알림을 위로 */
 function buildAlerts(items: Item[]): Alerts {
@@ -602,7 +651,7 @@ function buildAlerts(items: Item[]): Alerts {
     else if (state.data) list.push(...alertsFor(pour, state.data));
   }
   list.sort((x, y) => Number(!!x.sentAt) - Number(!!y.sentAt));
-  return { list, failed, selected: items.length, unsent: list.filter((x) => !x.sentAt).length };
+  return { list, failed, pours: items.map((x) => x.pour), selected: items.length, unsent: list.filter((x) => !x.sentAt).length };
 }
 
 const ALERT_ICON: Record<AlertItem["kind"], string> = { dayBefore: "⏰" };
@@ -620,11 +669,14 @@ function AlertPanel({ alerts, checks, demo, onSent }: { alerts: Alerts; checks: 
   return (
     <section className="card stack" aria-label="알림">
       <div className="stack" role="group" aria-label="강도 알림">
+      <div className="row between nowrap">
       <h3>강도 알림 {alerts.unsent > 0 && <span className="badge warn">{alerts.unsent}</span>}
         <Info align="right">{auto
           ? `부재 해체 기준 강도에 도달하기 하루 전에 알립니다. 서버가 ${ns.data!.interval_min}분마다 확인해, 받는 사람이 정해진 회차(타설 후 28일 이내)는 메일로 자동 발송합니다. 받는 사람이 없는 회차는 메일 초안 열기로 직접 보냅니다. 받는 사람은 회차 설정에서 정합니다.`
           : "부재 해체 기준 강도에 도달하기 하루 전에 알립니다. 메일 초안 열기를 누르면 기본 메일 앱에 받는 사람·제목·본문이 채워진 초안이 열립니다. 발송은 내용을 확인한 뒤 직접 합니다. 받는 사람은 회차 설정에서 정합니다."}</Info>
       </h3>
+      {!demo && canEdit && <AlertSettingsButton pours={alerts.pours} />}
+      </div>
       {auto && <div className="tiny">메일 자동 발송 켜짐{ns.data!.sender ? ` · 보내는 주소 ${ns.data!.sender}` : ""}{ns.data!.last_run ? ` · 마지막 확인 ${fmtDateTime(ns.data!.last_run)}` : ""}</div>}
       {auto && ns.data!.last_error && <div className="alert error small">자동 발송 실패: {ns.data!.last_error}. 다음 확인 때 다시 보냅니다.</div>}
       {alerts.selected === 0 && <div className="muted small">선택한 회차가 없습니다.</div>}
