@@ -1,6 +1,7 @@
 """타설 회차 API (화면: 현재 공사, 타설 이력, 회차 상세 4개 탭).
 
 - 회차 목록·등록·수정·삭제
+- /regions      현장 위치로 고를 수 있는 시·군·구 목록 (regions.py)
 - /summary      타설 이력 카드용 예측 요약
 - /detect       측압으로 타설 시각 자동 추정 (pour_detect.py)
 - /prediction   강도 예측 (maturity.py)
@@ -19,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import audit, criteria, maturity, notify
+from .. import audit, criteria, maturity, notify, regions, weather
 from ..auth import require_role
 from ..db import engine, get_session
 from ..models import AppUser, AuditLog, ExcludedRange, Pour, StrengthTest
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/api/pours", tags=["타설"])
 
 # 변경 기록에 보일 항목 이름 (화면의 입력 칸 이름과 맞춘다)
 POUR_LABELS = {
-    "name": "이름", "site": "현장", "pour_start": "타설 시작", "pour_end": "타설 종료",
+    "name": "이름", "site": "현장", "region_code": "현장 위치", "pour_start": "타설 시작", "pour_end": "타설 종료",
     "design_strength": "설계기준강도 (MPa)", "member": "부재 종류", "structure": "구조 형식",
     "durable": "내구성 중요 구조물", "removal_override": "해체 기준 직접 입력 (MPa)",
     "removal_override_reason": "해체 기준 사유", "sensors": "연결 센서", "note": "메모",
@@ -45,7 +46,19 @@ TEST_LABELS = {
 
 def pour_values(p: Pour) -> dict:
     """변경 기록용: 회차의 지금 값 (센서는 목록으로)."""
-    return {k: (p.sensor_list if k == "sensors" else getattr(p, k)) for k in POUR_LABELS}
+    out = {k: (p.sensor_list if k == "sensors" else getattr(p, k)) for k in POUR_LABELS}
+    out["region_code"] = region_name(p.region_code)   # 기록에는 코드 대신 이름
+    return out
+
+
+def region_name(code: str | None) -> str | None:
+    r = regions.BY_CODE.get(code or "")
+    return r["name"] if r else None
+
+
+def check_region(code: str | None) -> None:
+    if code and code not in regions.BY_CODE:
+        raise HTTPException(422, "현장 위치를 목록에서 골라 주세요.")
 
 
 CURING_LABEL = {"field": "현장양생", "water": "수중양생"}
@@ -57,7 +70,8 @@ def test_values(t: StrengthTest) -> dict:
 
 def to_out(p: Pour) -> PourOut:
     """DB의 회차를 화면에 보낼 모양(PourOut)으로 바꾼다."""
-    return PourOut(id=p.id, name=p.name, site=p.site, pour_start=p.pour_start, pour_end=p.pour_end,
+    return PourOut(id=p.id, name=p.name, site=p.site, region_code=p.region_code,
+                   region_name=region_name(p.region_code), pour_start=p.pour_start, pour_end=p.pour_end,
                    detected_start=p.detected_start, detected_end=p.detected_end,
                    design_strength=p.design_strength, member=p.member, structure=p.structure, durable=bool(p.durable),
                    removal_override=p.removal_override, removal_override_reason=p.removal_override_reason,
@@ -85,6 +99,12 @@ def list_pours(s: Session = Depends(get_session)):
     return [to_out(p) for p in all_pours(s)]
 
 
+@router.get("/regions")
+def list_regions():
+    """현장 위치로 고를 수 있는 시·군·구 목록 (회차 설정 화면). 예보 격자와 평년 기온 관측소 포함."""
+    return [{k: r[k] for k in ("code", "sido", "name", "station_name")} for r in regions.REGIONS]
+
+
 @router.get("/summary")
 def summary(s: Session = Depends(get_session)):
     """목록 화면용: 회차별 현재 예측 요약 (실패한 회차는 error 메시지)."""
@@ -107,12 +127,15 @@ def create_pour(body: PourIn, s: Session = Depends(get_session)):
     """새 회차 등록. 센서 목록은 'MAC1,MAC2' 문자열로 저장한다."""
     if err := criteria.check_override(body.member, body.durable, body.removal_override, body.removal_override_reason):
         raise HTTPException(422, err)
+    check_region(body.region_code)
     p = Pour(**body.model_dump(exclude={"sensors"}), sensors=",".join(x.upper() for x in body.sensors))
     if p.removal_override is None:
         p.removal_override_reason = None
     s.add(p)
     s.commit()
     maturity.clear_cache()
+    if p.region_code:
+        weather.refresh_soon(maturity.clear_cache)
     return to_out(get_pour(s, p.id))
 
 
@@ -128,6 +151,7 @@ def update_pour(pour_id: int, body: PourPatch, request: Request, s: Session = De
     p = get_pour(s, pour_id)
     before = pour_values(p)
     data = body.model_dump(exclude_unset=True)   # 보내지 않은 항목은 빼고
+    check_region(data.get("region_code"))
     if "sensors" in data:
         data["sensors"] = ",".join(x.upper() for x in data["sensors"] or [])
     if data.get("durable") is None:
@@ -143,6 +167,8 @@ def update_pour(pour_id: int, body: PourPatch, request: Request, s: Session = De
     after = pour_values(p)
     s.commit()
     maturity.clear_cache()
+    if after["region_code"] != before["region_code"] and p.region_code:
+        weather.refresh_soon(maturity.clear_cache)   # 새 위치의 예보·평년 기온을 바로 받고, 받으면 예측 다시 계산
     request.state.audit_detail = audit.detail_json({"changes": audit.changes(before, after, POUR_LABELS)})
     return to_out(get_pour(s, pour_id))
 

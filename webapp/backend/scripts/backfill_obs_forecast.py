@@ -44,7 +44,7 @@ def main() -> None:
     a, b = base + timedelta(hours=1), base + timedelta(hours=hours)
     if use_normal:
         idx = pd.date_range(a, b, freq="1h")
-        n = normal(idx)
+        n = normal(idx, CLIMATE_STATION)
         if n is None:
             sys.exit("평년 기온 표가 아직 없습니다 (서버를 켜면 처음 한 번 만들어집니다).")
         rows = [{"base_time": base, "fcst_time": t.to_pydatetime(), "nx": FORECAST_NX, "ny": FORECAST_NY,

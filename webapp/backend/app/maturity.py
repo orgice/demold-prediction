@@ -92,7 +92,7 @@ from scipy.optimize import curve_fit
 from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
-from . import criteria, weather
+from . import criteria, regions, weather
 from .config import (AMBIENT_OFFSET_INF, AMBIENT_OFFSET_TAU_H, BASELINE_HOURS, CALIBRATION_MAX_AGE_DAY, DATUM_TEMP,
                      FIXED_CURVE, FIXED_CURVE_SIGMA, THRESHOLDS)
 
@@ -481,11 +481,12 @@ def predict(engine: Engine, pour, all_pours: list, as_of: datetime | None = None
     as_of = max(as_of, pd.Timestamp(start) + STEP)                       # 타설 전으로도 못 감
 
     T_obs = T_all[T_all.index <= as_of]
-    fc = weather.forecast_at(as_of)   # 기준 시각에 알 수 있던 예보 (없으면 None → 직전 24시간 반복)
+    nx, ny, station = regions.location(pour.region_code)   # 현장 위치 (안 고르면 .env 기본 위치)
+    fc = weather.forecast_at(as_of, nx, ny)   # 기준 시각에 알 수 있던 예보 (없으면 None → 직전 24시간 반복)
     outside = None
     if fc is not None:
         outside = temperature(engine, pour.sensor_list, as_of - timedelta(hours=24), as_of + STEP, column="temp_out")
-    T_future, forecast_method = forecast_temperature(T_obs, end, outside, fc, weather.normal)
+    T_future, forecast_method = forecast_temperature(T_obs, end, outside, fc, lambda idx: weather.normal(idx, station))
     T = pd.concat([T_obs, T_future]) if not T_future.empty else T_obs
     # 3) 적산온도
     M = maturity(T)

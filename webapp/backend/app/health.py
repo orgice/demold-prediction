@@ -2,8 +2,8 @@
 
 감시하는 작업 (각 모듈이 끝날 때마다 report()로 성공·실패를 알린다)
     delta    센서 데이터 자동 수집 (delta_sync.py, 10분마다)
-    weather  기상청 단기예보 받기 (weather.py, 1시간마다)
-    climate  평년 기온 표 만들기 (weather.py, 서버 시작 때 한 번)
+    weather  기상청 단기예보 받기 (weather.py, 1시간마다, 진행 중인 회차의 현장 위치마다)
+    climate  평년 기온 표 만들기 (weather.py, 관측소마다 한 번)
 
 규칙
     - 한 번 실패로는 보내지 않는다. 처음 실패한 뒤 ALERT_AFTER_MIN 분 넘게 계속 실패하면 보낸다

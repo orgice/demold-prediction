@@ -64,6 +64,7 @@ def create_tables():
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS durable BOOLEAN NOT NULL DEFAULT 0"))
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override FLOAT NULL"))
         c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS removal_override_reason VARCHAR(300) NULL"))
+        c.execute(text("ALTER TABLE pour ADD COLUMN IF NOT EXISTS region_code VARCHAR(10) NULL"))
         # CSV·센서 관리: 원본 행이 어느 업로드로 들어왔는지, 업로드 표시 이름·센서 목록
         for t in ("pressure", "moisture"):
             c.execute(text(f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS upload_id INT NULL"))

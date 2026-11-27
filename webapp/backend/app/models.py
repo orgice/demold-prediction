@@ -129,6 +129,8 @@ class Pour(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100))
     site: Mapped[str | None] = mapped_column(String(200))
+    # 현장 위치 (시·군·구 행정구역코드, regions.py). 이 위치의 기상청 예보·평년 기온을 쓴다. 비우면 .env 기본 위치
+    region_code: Mapped[str | None] = mapped_column(String(10))
     pour_start: Mapped[datetime | None] = mapped_column(DateTime)   # 확정 타설 시작 (사용자 입력)
     pour_end: Mapped[datetime | None] = mapped_column(DateTime)     # 확정 타설 종료
     detected_start: Mapped[datetime | None] = mapped_column(DateTime)  # 측압 자동 추정
