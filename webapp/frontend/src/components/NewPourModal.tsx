@@ -6,6 +6,7 @@ import { api, Member, MEMBER_LABEL, Pour, UploadResult } from "../api/client";
 import { CsvPeek, peekCsv } from "../csvPeek";
 import { fmtDateTime, fromInput } from "../format";
 import { ErrorBox, Info, Modal, useAsync } from "./common";
+import RegionField from "./RegionField";
 
 /** 올릴 파일 하나 + 미리 읽은 내용(peek) 또는 읽기 오류 */
 /** saved: 이전 시도에서 이미 저장된 파일 (목록·업로드에서는 빼고, 센서·날짜를 찾는 데는 계속 쓴다) */
@@ -24,6 +25,12 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
   initialFiles?: File[];
 }) {
   const sensors = useAsync(api.sensors, []);
+  const regions = useAsync(api.regions, []);
+  const pours = useAsync(api.pours, []);
+  const [region, setRegion] = useState<string | null>(null);   // null = 아직 안 건드림 → 최근 회차 위치로 채움
+  // 같은 현장에서 이어서 등록하는 경우가 많아, 위치가 있는 가장 최근 회차의 위치를 기본으로 둔다
+  const lastRegion = [...(pours.data ?? [])].sort((a, b) => b.id - a.id).find((p) => p.region_code)?.region_code ?? "";
+  const regionValue = region ?? lastRegion;
   const [files, setFiles] = useState<FileItem[]>([]);
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
@@ -117,6 +124,7 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
       const pour = await api.createPour({
         name: name.trim(), sensors: macs, pour_start: fromInput(start),
         design_strength: design ? Number(design) : null, member: member || null,
+        region_code: regionValue || null,
       });
       let needsTime = !time;
       if (!time && date) {
@@ -168,7 +176,9 @@ export default function NewPourModal({ onClose, onDone, initialFiles = [] }: {
         </div>
       </div>
 
-      <label className="field">이름<input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 용인 6회차" /></label>
+      <label className="field">이름<input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 6회차" /></label>
+      <RegionField regions={regions.data ?? []} value={regionValue} onChange={setRegion}
+        note={region === null && lastRegion ? "최근 회차와 같은 위치로 채웠습니다. " : undefined} />
       <div className="form-row top">
         <div className="field">
           <span>타설 일시</span>

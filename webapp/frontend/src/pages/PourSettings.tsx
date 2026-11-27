@@ -8,9 +8,10 @@
 //   ⑥ 회차 삭제 (공시체 결과와 제외 구간은 함께 삭제, 센서 데이터는 남음)
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, Member, MEMBER_LABEL, Pour, Region, Structure, STRUCTURE_LABEL, UploadLog, UploadResult } from "../api/client";
+import { api, Member, MEMBER_LABEL, Pour, Structure, STRUCTURE_LABEL, UploadLog, UploadResult } from "../api/client";
 import { uploadName, uploadsApi, UPLOADS_IS_MOCK } from "../api/uploads";
 import { PourHistory } from "../components/ChangeHistory";
+import RegionField from "../components/RegionField";
 import { ErrorBox, Info, Loading, Modal, useAsync } from "../components/common";
 import { previewCriterion } from "../components/criteria";
 import { addHours, fmtDateTime, fmtFull, fmtSensorSpan, fromInput } from "../format";
@@ -78,14 +79,7 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
         <div className="form-row cols-2 top">
           <label className="field">이름<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
           <label className="field">현장<input value={f.site} onChange={(e) => setF({ ...f, site: e.target.value })} /></label>
-          <label className="field">
-            <span>현장 위치<Info align="right">앞으로의 콘크리트 온도를 이 위치의 기상청 단기예보(약 4일)와 가까운 관측소의 평년 기온으로 가정합니다. 고르지 않으면 서버 기본 위치를 씁니다.</Info></span>
-            <RegionSelect regions={regions.data ?? []} value={f.region} onChange={(region) => setF({ ...f, region })} />
-            {(() => {
-              const r = regions.data?.find((x) => x.code === f.region);
-              return <span className="tiny">{r ? `날씨: ${r.name} 예보 · ${r.station_name} 관측소 평년 기온` : "고르지 않으면 서버 기본 위치의 날씨를 씁니다."}</span>;
-            })()}
-          </label>
+          <RegionField regions={regions.data ?? []} value={f.region} onChange={(region) => setF({ ...f, region })} />
           <label className="field">부재 종류
             <select value={f.member} onChange={(e) => setF({ ...f, member: e.target.value as Member | "" })}>
               <option value="">미지정</option>
@@ -419,18 +413,3 @@ function Exclusions({ pour, onChanged }: { pour: Pour; onChanged: () => void }) 
   );
 }
 
-/** 현장 위치 선택: 시·도별로 묶은 시·군·구 목록 */
-function RegionSelect({ regions, value, onChange }: { regions: Region[]; value: string; onChange: (code: string) => void }) {
-  const groups = new Map<string, Region[]>();
-  regions.forEach((r) => groups.set(r.sido, [...(groups.get(r.sido) ?? []), r]));
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">미지정 (서버 기본 위치)</option>
-      {[...groups].map(([sido, rs]) => (
-        <optgroup key={sido} label={sido}>
-          {rs.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
-        </optgroup>
-      ))}
-    </select>
-  );
-}
