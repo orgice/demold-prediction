@@ -74,12 +74,10 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
     <>
       <div className="card stack">
         <h3>기본 정보</h3>
-        <div className="form-row">
+        {/* 두 칸씩: 이름·현장 / 현장 위치·부재 종류 / 설계기준강도 */}
+        <div className="form-row cols-2 top">
           <label className="field">이름<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
           <label className="field">현장<input value={f.site} onChange={(e) => setF({ ...f, site: e.target.value })} /></label>
-        </div>
-        <div className="form-row">
-          <div />
           <label className="field">
             <span>현장 위치<Info align="right">앞으로의 콘크리트 온도를 이 위치의 기상청 단기예보(약 4일)와 가까운 관측소의 평년 기온으로 가정합니다. 고르지 않으면 서버 기본 위치를 씁니다.</Info></span>
             <RegionSelect regions={regions.data ?? []} value={f.region} onChange={(region) => setF({ ...f, region })} />
@@ -88,8 +86,6 @@ export default function SettingsTab({ pour, onSaved }: { pour: Pour; onSaved: ()
               return <span className="tiny">{r ? `날씨: ${r.name} 예보 · ${r.station_name} 관측소 평년 기온` : "고르지 않으면 서버 기본 위치의 날씨를 씁니다."}</span>;
             })()}
           </label>
-        </div>
-        <div className="form-row">
           <label className="field">부재 종류
             <select value={f.member} onChange={(e) => setF({ ...f, member: e.target.value as Member | "" })}>
               <option value="">미지정</option>
