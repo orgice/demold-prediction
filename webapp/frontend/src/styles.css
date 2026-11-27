@@ -321,6 +321,8 @@ tbody tr:hover { background: var(--hover); }
   border-radius: var(--radius-s); font-size: 14px; cursor: pointer; }
 .picker-item:hover { background: var(--hover); }
 .picker-item.disabled { opacity: 0.4; cursor: default; }
+.picker-pop.right { left: auto; right: 0; }   /* 오른쪽 끝 버튼에서 열 때 (강도 알림 톱니바퀴) */
+.picker-item.plain { width: 100%; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
 .picker-item.disabled:hover { background: none; }
 
 .icon-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
