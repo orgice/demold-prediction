@@ -2,6 +2,8 @@
 #   - CI가 하나라도 실패하거나 취소되면 머지하지 않는다.
 #   - Draft PR, 다른 저장소(fork)에서 온 PR, 'no-auto-merge' 라벨이 붙은 PR은 건너뛴다.
 #   - CI가 도는 사이 새 커밋이 올라오면 검사한 커밋과 PR 끝이 달라 머지하지 않는다(새 커밋의 CI가 다시 판단).
+#   - 머지한 뒤 PR 본문의 '## 추가·변경된 기능' 부분을 댓글로 단다 (GitHub 알림 메일로 기능 설명이 가도록).
+#     그 제목이 없으면 PR 본문 전체를 단다.
 name: Auto merge
 
 on:
@@ -12,6 +14,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write   # PR 댓글 (GitHub API 에서 PR 댓글은 issue 댓글)
 
 jobs:
   merge:
@@ -48,3 +51,14 @@ jobs:
           fi
           gh pr merge "$number" --merge --match-head-commit "$HEAD_SHA"
           echo "PR #$number 을 main에 머지했습니다."
+
+          # 기능 설명 댓글 (실패해도 머지는 이미 끝났으므로 작업은 성공으로 둔다)
+          body=$(gh pr view "$number" --json body --jq .body)
+          section=$(printf '%s\n' "$body" | awk '
+            /^## 추가·변경된 기능/ { on = 1; next }
+            on && /^## / { exit }
+            on { print }')
+          [ -n "$(printf '%s' "$section" | tr -d '[:space:]')" ] || section="$body"
+          printf '**main에 머지했습니다.** 운영 서버에는 배포해야 반영됩니다.\n\n### 추가·변경된 기능\n%s\n' "$section" \
+            | gh pr comment "$number" --body-file - \
+            || echo "::warning::기능 설명 댓글을 달지 못했습니다."
