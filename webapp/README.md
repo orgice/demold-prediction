@@ -60,7 +60,8 @@ docker compose -p demold_public --profile https up -d --build
 ```
 
 http로 들어오면 https로 자동으로 넘기고, HTTPS로 들어온 로그인은 HTTPS 전용 쿠키(`Secure`)를 받습니다.
-운영 서버에서는 8080·8000·3306 포트를 외부에 열지 마세요 (443·80만).
+8080·8000·3306 포트는 기본 설정에서 이 컴퓨터(127.0.0.1) 안에서만 열립니다. 밖에서는 caddy 의 443·80 으로만 들어옵니다.
+같은 네트워크의 다른 기기에서 http://<IP>:8080 으로 보고 싶을 때만 `docker-compose.override.yml` 로 포트를 따로 엽니다 (운영 서버에서는 금지).
 
 ### 초기 데이터 넣기 (처음 한 번)
 

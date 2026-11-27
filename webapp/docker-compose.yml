@@ -13,7 +13,7 @@ services:
       MARIADB_PASSWORD: ${DB_PASSWORD:-demold}
     command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_general_ci",
               "--innodb-buffer-pool-size=512M"]
-    ports: ["3306:3306"]
+    ports: ["127.0.0.1:3306:3306"]   # 이 컴퓨터 안에서만 열림 (밖에서 DB 접속 불가)
     volumes: [db-data:/var/lib/mysql]
     healthcheck:   # DB가 준비됐는지 5초마다 확인 (준비돼야 backend가 켜짐)
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
@@ -56,7 +56,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}   # HTTPS(caddy)로 들어온 요청은 이 값과 관계없이 HTTPS 전용 쿠키
     depends_on:
       db: {condition: service_healthy}
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]   # 이 컴퓨터 안에서만 열림 (밖에서는 화면의 /api 로만)
     volumes:
       # 초기 적재용 센서 CSV 폴더 (읽기 전용). 데이터는 저장소에 포함되지 않음 → webapp/.env 의 SEED_SENSOR_DIR
       - ${SEED_SENSOR_DIR:-../private_data/sensors}:/seed/sensors:ro
@@ -68,7 +68,7 @@ services:
     build: ./frontend
     restart: unless-stopped   # 서버 재부팅·오류로 꺼져도 다시 켠다 (docker compose stop 으로 끈 것은 그대로)
     depends_on: [backend]
-    ports: ["8080:80"]
+    ports: ["127.0.0.1:8080:80"]     # 이 컴퓨터 안에서만 열림 (밖에서는 caddy 의 443 으로)
 
   # HTTPS 앞단 (선택). 실제 서비스할 때만 켠다:  docker compose -p demold_public --profile https up -d
   # 443(HTTPS)으로 받아 frontend 로 넘긴다. 인증서는 자동 발급·갱신 (caddy/Caddyfile, .env 의 SITE_ADDRESS)
